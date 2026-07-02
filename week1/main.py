@@ -137,12 +137,72 @@ def check_missing(df) :
     return(result_dict_missing)
 
 
+# 5. 넘파이로 문서 길이 통계량 계산
+def numpy_doc_stats(df) :
+    print('5. 넘파이로 문서 길이 통계량 계산')
+    df_clean = df.dropna().copy() # 어떤 열이든 관계 없이 결측치 있으면 그 행은 제거
+    word_counts = np.array([len(str(x).split()) for x in df_clean['content']])
+
+    print('1) content열의 단어 수 통계량(넘파이)')
+    np_stats = {
+        "평균": np.mean(word_counts),
+        "표준편차": np.std(word_counts, ddof = 1),
+        "중앙값": np.median(word_counts),
+        "최솟값": np.min(word_counts),
+        "최댓값": np.max(word_counts)
+    }
+    
+    for k, v in np_stats.items():
+        print(f"{k}: {v:.2f}")
+
+    # print(f'평균 : {np.mean(word_counts):.2f}')
+    # print(f'표준편차 : {np.std(word_counts, ddof = 1):.2f}')
+    # print(f'중앙값 : {np.median(word_counts):.2f}')
+    # print(f'최솟값 : {np.min(word_counts):.2f}')
+    # print(f'최댓값 : {np.max(word_counts):.2f}')
+    print()
+
+    print('2) 50단어 미만 문서')
+    short_docs = df_clean[word_counts < 50]
+    print(f'50단어 미만 문서 수 : {len(short_docs)}개')
+
+    if len(short_docs) > 0 :
+        print('50단어 미만 문서 목록')
+        print(short_docs.head())
+    print()
+
+    print('3) 넘파이 통계량 vs 판다스 describe() 비교')
+    pd_stats = df_clean['content'].apply(lambda x: len(str(x).split())).describe()
+    print(f"{'통계량':<10} | {'넘파이':>10} | {'판다스':>10}")
+    print("-" * 35)
+    print(f"{'평균':<10} | {np_stats['평균']:>10.2f} | {pd_stats['mean']:>10.2f}")
+    print(f"{'표준편차':<10} | {np_stats['표준편차']:>10.2f} | {pd_stats['std']:>10.2f}")
+    print(f"{'중앙값':<10} | {np_stats['중앙값']:>10.2f} | {pd_stats['50%']:>10.2f}")
+    print(f"{'최솟값':<10} | {np_stats['최솟값']:>10.2f} | {pd_stats['min']:>10.2f}")
+    print(f"{'최댓값':<10} | {np_stats['최댓값']:>10.2f} | {pd_stats['max']:>10.2f}")
+    print()
+    
+    # 자동 검증
+    comparison_items = [('평균', 'mean'), ('표준편차', 'std'), ('중앙값', '50%'), ('최솟값', 'min'), ('최댓값', 'max')]
+    
+    all_match = True
+    for np_key, pd_key in comparison_items:
+        if np.isclose(np_stats[np_key], pd_stats[pd_key]):
+            print(f"✅ {np_key} 일치")
+        else:
+            print(f"❌ {np_key} 불일치 (NumPy: {np_stats[np_key]:.2f}, Pandas: {pd_stats[pd_key]:.2f})")
+            all_match = False
+            
+    if all_match:
+        print("\n✅ 모든 통계량이 일치합니다.")
+
 # 6. main() 함수로 전체 연결
 def main() :
     df = load_data(DATA_PATH)
     # explore_structure(df)
     # show_category_distribution(df)
-    check_missing(df)
+    # check_missing(df)
+    numpy_doc_stats(df)
 
 if __name__ == '__main__' :
     main()
