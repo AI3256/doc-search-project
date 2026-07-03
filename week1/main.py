@@ -31,7 +31,7 @@ def load_data(file_path) :
         print(f"오류: '{os.path.basename(file_path)}' 파일을 찾을 수 없습니다.")
         sys.exit()
     
-    print('\n\n')
+    print('\n')
     
     return df
 
@@ -68,7 +68,7 @@ def explore_structure(df) :
     print('4) 상위 5행')
     print(df.head(5))
 
-    print('\n\n')
+    print('\n')
 
 
 # 3. 카테고리 분포 확인
@@ -121,7 +121,7 @@ def show_category_distribution(df) :
     for cat, stats in result_dict_dist.items():
         print(f"{cat}\t\t{stats['문서 수']}\t\t{stats['비율']:.2f}%\t\t{stats['평균 단어 수']:.2f}")
     
-    print('\n\n')
+    print('\n')
 
     return result_dict_dist
 
@@ -193,13 +193,12 @@ def check_missing(df) :
 
         print('2) 결측치가 없는 컬럼')
         print(', '.join(clean_cols))
-        print()
-        print()
+        print('\n')
 
     else :
         print('결측치가 있는 컬럼 : 없음')
 
-    print('\n\n')
+    print('\n')
 
     return(result_dict_missing)
 
@@ -281,7 +280,7 @@ def numpy_doc_stats(df) :
 
 # 6. main() 함수로 전체 연결
 def main() :
-    DATA_PATH = 'data/tech_docs copy.csv'
+    DATA_PATH = 'data/tech_docs.csv'
     df = load_data(DATA_PATH)
     explore_structure(df)
     show_category_distribution(df)
