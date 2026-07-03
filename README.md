@@ -25,7 +25,7 @@
 
 ### 1. 라이브러리 설치
 터미널에서 아래 명령어를 입력하여 필요한 라이브러리를 설치합니다.
-```python
+```bash
 pip install pandas numpy
 ```
 
@@ -33,7 +33,7 @@ pip install pandas numpy
 1. 분석하고자 하는 CSV 파일을 프로젝트 폴더에 위치시킵니다.
 2. 소스 코드 내 main() 함수에서 DATA_PATH 변수를 데이터 파일 경로에 맞게 수정합니다.
 3. 터미널에서 다음 명령어를 실행합니다.
-```python
+```bash
 python 분석스크립트파일이름.py
 ```
 
