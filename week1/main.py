@@ -4,6 +4,10 @@ import numpy as np
 import os
 import sys
 
+# 설정값
+MISSING_THRESHOLD_LOW = 5
+MISSING_THRESHOLD_HIGH = 20
+WORD_COUNT_THRESHOLD = 50
 
 # 1. 데이터 불러오기
 def load_data(file_path) :
@@ -34,6 +38,28 @@ def load_data(file_path) :
     print('\n')
     
     return df
+
+
+# 1-1. 데이터 전처리
+def preprocess_data(df):
+    '''
+    데이터셋에서 결측치를 제거하고, 분석에 적합한 문자열 데이터만 필터링합니다.
+
+    Args :
+        df_raw(pd.DataFrame) : 로드된 원본 데이터프레임
+
+    Returns:
+        df_clean(pd.DataFrame): 결측치와 비문자열(non-string) content가 제거된 정제된 데이터프레임
+    '''
+    # # 1. 모든 컬럼에서 결측치(NaN)가 포함된 행 제거
+    # 만약 content 열만 타겟팅해야 한다면 df_clean = df.dropna(subset=['content']).copy()로 변경 가능합니다.
+    df_clean = df.dropna().copy()
+
+    # 2. 'content' 컬럼의 데이터가 문자열(str)인 행만 추출
+    # (문자열이 아닌 데이터로 인한 오류 방지)
+    df_clean = df_clean[df_clean['content'].apply(lambda x: isinstance(x, str))]
+    
+    return df_clean
 
 
 # 2. 데이터 구조 확인
@@ -72,7 +98,7 @@ def explore_structure(df) :
 
 
 # 3. 카테고리 분포 확인
-def show_category_distribution(df) :
+def show_category_distribution(df_clean) :
     '''
     카테고리별 문서 수, 비율, 평균 단어 수를 계산하고 표 형태로 출력합니다.
 
@@ -83,11 +109,6 @@ def show_category_distribution(df) :
         dict : 카테고리명을 키로 하고, 통계량(문서 수, 비율, 평균 단어 수)을 값으로 가지는 딕셔너리
     '''
     
-    # 분석의 정확성을 위해 결측치가 포함된 행을 제거하고 (어떤 열이든 관계 없이 결측치 있는 행 제거)
-    # content가 문자열 타입인 데이터만 필터링합니다.
-    df_clean = df.dropna().copy() 
-    df_clean = df_clean[df_clean['content'].apply(lambda x: isinstance(x, str))]
-
     print('3. 카테고리 분포 확인')
 
     cat_counts_df = df_clean['category'].value_counts()
@@ -145,10 +166,6 @@ def check_missing(df) :
     clean_cols = []
     total_rows = len(df)
 
-    # 심각도 판별을 위한 임계값 정의
-    THRESHOLD_LOW = 5
-    THRESHOLD_HIGH = 20
-
     for col in df.columns :
         missing_count = df[col].isnull().sum()
 
@@ -158,9 +175,9 @@ def check_missing(df) :
             missing_ratio = missing_count / total_rows * 100
 
             # 결측치 비율에 따른 심각도 분류
-            if missing_ratio < THRESHOLD_LOW :
+            if missing_ratio < MISSING_THRESHOLD_LOW :
                 severity = '낮음'
-            elif missing_ratio < THRESHOLD_HIGH :
+            elif missing_ratio < MISSING_THRESHOLD_HIGH :
                 severity = '주의'
             else :
                 severity = '높음'
@@ -197,14 +214,13 @@ def check_missing(df) :
 
     else :
         print('결측치가 있는 컬럼 : 없음')
-
-    print('\n')
+        print('\n')
 
     return(result_dict_missing)
 
 
 # 5. 넘파이로 문서 길이 통계량 계산
-def numpy_doc_stats(df) :
+def numpy_doc_stats(df_clean) :
     '''
     NumPy를 사용해 문서 길이의 통계량을 계산하고, Pandas의 결과와 일치하는지 비교합니다.
 
@@ -216,9 +232,8 @@ def numpy_doc_stats(df) :
     '''
     print('5. 넘파이로 문서 길이 통계량 계산')
     
-    # 통계 계산을 위해 결측치를 제거하고 (어떤 열이든 관계 없이 결측치 있는 행 제거),
+    
     # 문자열을 분리하여 단어 수를 배열로 변환
-    df_clean = df.dropna().copy() # 
     word_counts = np.array([len(str(x).split()) for x in df_clean['content']])
 
     print('1) content열의 단어 수 통계량(넘파이)')
@@ -236,7 +251,7 @@ def numpy_doc_stats(df) :
 
     # 50단어 미만인 문서만 필터링하여 확인
     print('2) 50단어 미만 문서')
-    short_docs = df_clean[word_counts < 50]
+    short_docs = df_clean[word_counts < WORD_COUNT_THRESHOLD]
     print(f'50단어 미만 문서 수 : {len(short_docs)}개')
 
     if len(short_docs) > 0 :
@@ -280,12 +295,29 @@ def numpy_doc_stats(df) :
 
 # 6. main() 함수로 전체 연결
 def main() :
+    '''
+    프로그램의 전체 실행 흐름을 제어합니다.
+    데이터 로드부터 구조 확인, 결측치 조사, 통계 분석까지의 과정을 순차적으로 실행합니다.
+    '''
     DATA_PATH = 'data/tech_docs.csv'
-    df = load_data(DATA_PATH)
-    explore_structure(df)
-    show_category_distribution(df)
-    check_missing(df)
-    numpy_doc_stats(df)
+
+    # 1. 데이터 불러오기
+    df_raw = load_data(DATA_PATH)
+
+    # 1-1. 데이터 정제하기
+    df_clean = preprocess_data(df_raw)
+
+    # 2. 데이터 구조 확인
+    explore_structure(df_raw)
+
+    # 3. 카테고리 분포 확인
+    show_category_distribution(df_clean)
+
+    # 4. 결측치 현황 파악
+    check_missing(df_raw)
+
+    # 5. 넘파이를 활용한 문서 길이 통계량 계산 및 비교 검증
+    numpy_doc_stats(df_clean)
 
 if __name__ == '__main__' :
     main()
