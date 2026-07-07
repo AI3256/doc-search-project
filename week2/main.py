@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-import sklearn
+from sklearn.feature_extraction.text import TfidfVectorizer
 import os
 import sys
 import re
@@ -24,7 +24,7 @@ def load_data(file_path) :
     Raises :
         SystemExit : 파일이 존재하지 않을 경우 프로그램을 안전하게 종료함
     '''
-    print('1. 데이터 불러오기')
+    # print('1. 데이터 불러오기')
 
     # 파일 경로가 실제 존재하는지 확인하여 불필요한 오류 방지
     if os.path.exists(file_path) :
@@ -35,8 +35,6 @@ def load_data(file_path) :
         # 파일이 없을 경우 사용자에게 알리고 프로그램 중단
         print(f"오류: '{os.path.basename(file_path)}' 파일을 찾을 수 없습니다.")
         sys.exit()
-    
-    print('\n')
     
     return df
 
@@ -308,8 +306,8 @@ def preprocess(df) :
 
     df_clean['content_clean'] = df_clean['content'].apply(clean_text)
 
-    print(df_clean[['content', 'content_clean']].head(3))
-    
+    # print(df_clean[['content', 'content_clean']].head(3))
+    print('전처리 완료 : content_clean 컬럼 생성')
     return df_clean
     # for x in df_clean['content_clean'] :
     #     print(x)
@@ -329,17 +327,70 @@ def consine_similarity_numpy(vec1, vec2) :
     return np.dot(vec1, vec2) / (norm1 * norm2)
 
 
+# # 3. 키워드 기반 Baseline 검색
+# def keyword_search(question, df_clean, top_k) :
+#     q_set = set(question.lower().split())
+
+#     df_clean['score'] = df_clean['content_clean'].apply(lambda x : len(q_set & set(x.split())))
+#     result_score = df_clean.sort_values('score', ascending = False)
+#     print(result_score[['doc_id', 'title', 'category', 'score']].head(top_k))
+
+#     return result_score
+
 # 3. 키워드 기반 Baseline 검색
 def keyword_search(question, df_clean, top_k) :
     q_set = set(question.lower().split())
-
-    df_clean['score'] = df_clean['content_clean'].apply(lambda x : len(q_set & set(x.split())))
-    result_score = df_clean.sort_values('score', ascending = False)
-    print(result_score[['doc_id', 'title', 'category', 'score']].head(top_k))
+    score = [len(q_set & set(content.split())) for content in df_clean['content_clean']]
+    top_indices = np.array(score).argsort()[::-1][:top_k]
+    result_score = df_clean.iloc[top_indices].copy()
+    result_score['score'] = np.array(score)[top_indices]
+    
+    # print('=== Keyword Baseline ===')
+    # print(result_score[['doc_id', 'title', 'category', 'score']])
 
     return result_score
 
+# 4. TF-IDF 벡터화
+def build_tfidf(df_clean) :
+    vectorizer = TfidfVectorizer(
+            max_features = 5000, 
+            min_df = 2, 
+            stop_words = 'english'
+        )
+    
+    tfidf_matrix = vectorizer.fit_transform(df_clean['content_clean'])
 
+    rows, cols = tfidf_matrix.shape
+    print(f'TF-IDF 행렬 크기 : ({rows}, {cols}) | 사용된 단어 수 : {cols}')
+    
+    return tfidf_matrix, vectorizer
+
+
+# # 5. TF-IDF 기반 Top-k 검색
+# def tfidf_search(question, df_clean, tfidf_marix, vectorizer, top_k) :
+#     q_matrix_nparr = vectorizer.transform([question.lower()]).toarray()
+
+#     tfidf_matrix_nparr = tfidf_marix.toarray()
+
+#     df_clean['similarity'] = df_clean.index.map(lambda i: consine_similarity_numpy(q_matrix_nparr, tfidf_matrix_nparr[i]))
+#     result_similarity = df_clean.sort_values('similarity', ascending = False)
+#     print(result_similarity[['doc_id', 'title', 'category', 'similarity']].head(top_k))
+
+#     return result_similarity
+
+# 5. TF-IDF 기반 Top-k 검색
+def tfidf_search(question, df_clean, tfidf_marix, vectorizer, top_k) :
+    q_matrix_nparr = vectorizer.transform([question.lower()]).toarray().flatten()
+
+    tfidf_matrix_nparr = tfidf_marix.toarray()
+
+    similarity = [consine_similarity_numpy(q_matrix_nparr, tfidf_matrix_nparr[i]) for i in range(len(tfidf_matrix_nparr))]
+    top_indices = np.array(similarity).argsort()[::-1][:top_k]
+    result_similarity = df_clean.iloc[top_indices].copy()
+    result_similarity['similarity'] = [similarity[i] for i in top_indices]
+    # print(result_similarity[['doc_id', 'title', 'category', 'similarity']])
+
+    return result_similarity
 
 # 6. main() 함수로 전체 연결
 def main() :
@@ -377,9 +428,23 @@ def main() :
     # 2. 코사인 유사도 직접 구현
     # consine_similarity_numpy(v1, v2)
 
-    # 3. 키워드 기반 Baseline 검색
-    keyword_search(QUESTION, df_clean, TOP_K)
+    # 4. TF-IDF 벡터화
+    tfidf_matrix, vectorizer = build_tfidf(df_clean)
 
+    # 3. 키워드 기반 Baseline 검색
+    result_score = keyword_search(QUESTION, df_clean, TOP_K)
+
+    # 5. TF-IDF 기반 Top-k 검색
+    result_similarity = tfidf_search(QUESTION, df_clean, tfidf_matrix, vectorizer, TOP_K)
+
+    print()
+    print(f'질문 : {QUESTION}')
+    print()
+    print('=== Keyword Baseline ===')
+    print(result_score[['doc_id', 'title', 'category', 'score']])
+    print()
+    print('=== TF-IDF Search ===')
+    print(result_similarity[['doc_id', 'title', 'category', 'similarity']])
 
 if __name__ == '__main__' :
     main()
