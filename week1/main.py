@@ -76,41 +76,37 @@ def explore_structure(df) :
     print('2. 데이터 구조 확인')
 
     # 1) 행과 열의 개수를 출력하여 전체 데이터 규모 파악
-    print('1) 행/열 수')
+    print('=== 행/열 수 ===')
     print(f'({df.shape[0]}, {df.shape[1]})')
-    print('=' * 70)
+    print()
 
     # 2) 데이터 내 컬럼명 확인
-    print('2) 컬럼명')
+    print('=== 컬럼명 ===')
     print(df.columns)
-    print('=' * 70)
+    print()
 
     # 3) 각 컬럼의 데이터 타입(dtype) 확인하여 데이터 형식이 적절한지 검토
-    print('3) 컬럼별 자료형 목록')
+    print('=== 컬럼별 자료형 목록 ===')
     print(df.dtypes)
-    print('=' * 70)
+    print()
 
     # 4) 데이터의 첫 5행을 출력하여 실제 데이터 내용 확인
-    print('4) 상위 5행')
+    print('=== 상위 5행 ===')
     print(df.head(5))
-
     print('\n')
 
 
 # 3. 카테고리 분포 확인
 def show_category_distribution(df_clean) :
     '''
-    카테고리별 문서 수, 비율, 평균 단어 수를 계산하고 표 형태로 출력합니다.
+    카테고리별 문서 수, 비율, 평균 단어 수를 계산하여 통계 데이터를 생성합니다.
 
     Args : 
-        df(pd.DataFrame) : 분석할 원본 데이터프레임
+        df_clean (pd.DataFrame): 정제된 데이터프레임
 
     Returns :
         dict : 카테고리명을 키로 하고, 통계량(문서 수, 비율, 평균 단어 수)을 값으로 가지는 딕셔너리
     '''
-    
-    print('3. 카테고리 분포 확인')
-
     cat_counts_df = df_clean['category'].value_counts()
     total_docs = cat_counts_df.sum() # 전체 문서 수
     result_dict_dist = {}
@@ -134,15 +130,6 @@ def show_category_distribution(df_clean) :
             '비율' : cat_ratio,
             '평균 단어 수' : cat_avg_words
         }
-    
-    # 결과를 표로 출력합니다.
-    print("카테고리\t문서 수\t\t비율\t\t평균 단어 수")
-    print("-" * 60)
-
-    for cat, stats in result_dict_dist.items():
-        print(f"{cat}\t\t{stats['문서 수']}\t\t{stats['비율']:.2f}%\t\t{stats['평균 단어 수']:.2f}")
-    
-    print('\n')
 
     return result_dict_dist
 
@@ -150,17 +137,18 @@ def show_category_distribution(df_clean) :
 # 4. 결측치 현황 파악
 def check_missing(df) :
     '''
-    데이터프레임의 각 컬럼별 결측치 수와 비율을 계산하고, 
-    비율에 따라 심각도(낮음/주의/높음)를 분류하여 출력합니다.
+    데이터프레임의 각 컬럼별 결측치 수와 비율을 계산하여 통계 데이터를 생성합니다. 
+    결측치 비율에 따라 '낮음/주의/높음/없음'으로 심각도를 분류합니다.
 
     Args :
         df(pd.DataFrame) : 분석할 원본 데이터프레임
 
     Returns :
-        dict : 컬럼별 결측치 통계(수, 비율, 심각도)를 담은 딕셔너리
+        tuple: (result_dict_missing, missing_cols, clean_cols)
+            - result_dict_missing (dict): 컬럼별 결측치 통계(수, 비율, 심각도) 딕셔너리
+            - missing_cols (list): 결측치가 존재하는 컬럼명 리스트
+            - clean_cols (list): 결측치가 없는 컬럼명 리스트
     '''
-    print('4. 결측치 현황 파악')
-
     result_dict_missing = {}
     missing_cols = []
     clean_cols = []
@@ -197,9 +185,70 @@ def check_missing(df) :
                 '심각도' : '없음'
             }
 
-    # 결측치 정보 출력
+    return(result_dict_missing, missing_cols, clean_cols)
+
+
+# 5. 넘파이로 문서 길이 통계량 계산
+def numpy_doc_stats(df_clean) :
+    '''
+    NumPy를 사용해 문서 길이(단어 수)의 통계량을 계산하고, 
+    Pandas의 기술 통계량과 비교하기 위한 데이터를 준비합니다.
+
+    Args :
+        df_clean (pd.DataFrame): 정제된 데이터프레임
+
+    Returns :
+        tuple: (np_stats, short_docs, pd_stats)
+            - np_stats (dict): NumPy로 계산된 통계량(평균, 표준편차, 중앙값, 최솟값, 최댓값)
+            - short_docs (pd.DataFrame): WORD_COUNT_THRESHOLD 미만인 짧은 문서들
+            - pd_stats (pd.Series): Pandas의 describe() 결과
+    '''
+    
+    # 문자열을 분리하여 단어 수를 배열로 변환
+    word_counts = np.array([len(str(x).split()) for x in df_clean['content']])
+
+    # 50단어 미만인 문서만 필터링하여 확인
+    short_docs = df_clean[word_counts < WORD_COUNT_THRESHOLD]
+
+    # 넘파이 통계량
+    np_stats = {
+        '평균': np.mean(word_counts),
+        '표준편차': np.std(word_counts, ddof = 1), # ddof=1: 표본 표준편차 설정
+        '중앙값': np.median(word_counts),
+        '최솟값': np.min(word_counts),
+        '최댓값': np.max(word_counts)
+    }
+
+    # 판다스 통계량
+    pd_stats = df_clean['content'].apply(lambda x: len(str(x).split())).describe()
+
+    return np_stats, short_docs, pd_stats
+
+
+# 6. 출력
+def display_results(analysis_results):
+    result_dict_dist = analysis_results['result_dict_dist']
+    result_dict_missing = analysis_results['result_dict_missing']
+    missing_cols = analysis_results['missing_cols']
+    clean_cols = analysis_results['clean_cols']
+    np_stats = analysis_results['np_stats']
+    short_docs = analysis_results['short_docs']
+    pd_stats = analysis_results['pd_stats']
+    
+    # 3번 출력
+    print('3. 카테고리 분포 확인')
+    print("카테고리\t문서 수\t\t비율\t\t평균 단어 수")
+    print("-" * 60)
+
+    for cat, stats in result_dict_dist.items():
+        print(f"{cat}\t\t{stats['문서 수']}\t\t{stats['비율']:.2f}%\t\t{stats['평균 단어 수']:.2f}")
+    
+    print('\n')
+
+    # 4번 출력
+    print('4. 결측치 현황 파악')
     if missing_cols :
-        print('1) 결측치가 있는 컬럼')
+        print('=== 결측치가 있는 컬럼 ===')
         print(f"{'컬럼명':<10} | {'결측치 수':<10} | {'결측치 비율':<10} | {'심각도':<10}")
         print("-" * 60)
 
@@ -208,7 +257,7 @@ def check_missing(df) :
             print(f"{col:<10} | {stats['결측치 수']:>10} | {stats['결측치 비율']:>10.2f}% | {stats['심각도']:<10}")
         print()
 
-        print('2) 결측치가 없는 컬럼')
+        print('=== 결측치가 없는 컬럼 ===')
         print(', '.join(clean_cols))
         print('\n')
 
@@ -216,42 +265,15 @@ def check_missing(df) :
         print('결측치가 있는 컬럼 : 없음')
         print('\n')
 
-    return(result_dict_missing)
-
-
-# 5. 넘파이로 문서 길이 통계량 계산
-def numpy_doc_stats(df_clean) :
-    '''
-    NumPy를 사용해 문서 길이의 통계량을 계산하고, Pandas의 결과와 일치하는지 비교합니다.
-
-    Args :
-        df(pd.DataFrame) : 분석할 원본 데이터프레임
-
-    Returns :
-        None : 분석 결과를 콘솔에 출력합니다.
-    '''
+    # 5번 출력
     print('5. 넘파이로 문서 길이 통계량 계산')
-    
-    
-    # 문자열을 분리하여 단어 수를 배열로 변환
-    word_counts = np.array([len(str(x).split()) for x in df_clean['content']])
 
-    print('1) content열의 단어 수 통계량(넘파이)')
-    np_stats = {
-        '평균': np.mean(word_counts),
-        '표준편차': np.std(word_counts, ddof = 1), # ddof=1: 표본 표준편차 설정
-        '중앙값': np.median(word_counts),
-        '최솟값': np.min(word_counts),
-        '최댓값': np.max(word_counts)
-    }
-    
+    print('=== content열의 단어 수 통계량(넘파이) ===')
     for k, v in np_stats.items():
         print(f"{k}: {v:.2f}")
     print()
 
-    # 50단어 미만인 문서만 필터링하여 확인
-    print('2) 50단어 미만 문서')
-    short_docs = df_clean[word_counts < WORD_COUNT_THRESHOLD]
+    print('=== 50단어 미만 문서 ===')
     print(f'50단어 미만 문서 수 : {len(short_docs)}개')
 
     if len(short_docs) > 0 :
@@ -259,13 +281,7 @@ def numpy_doc_stats(df_clean) :
         print(short_docs.head())
     print()
 
-    # Pandas의 describe() 함수 결과와 넘파이 결과 비교
-    print('3) 넘파이 통계량 vs 판다스 describe() 비교')
-    pd_stats = df_clean['content'].apply(lambda x: len(str(x).split())).describe()
-    
-    print(f"{'통계량':<10} | {'넘파이':>10} | {'판다스':>10}")
-    print("-" * 50)
-
+    print('=== 넘파이 통계량 vs 판다스 describe() 비교 ===')
     stats_list = [
         ('평균', np_stats['평균'], pd_stats['mean']),
         ('표준편차', np_stats['표준편차'], pd_stats['std']),
@@ -274,13 +290,14 @@ def numpy_doc_stats(df_clean) :
         ('최댓값', np_stats['최댓값'], pd_stats['max'])
     ]
 
+    print(f"{'통계량':<10} | {'넘파이':>10} | {'판다스':>10}")
+    print("-" * 50)
     for name, np_val, pd_val in stats_list:
         print(f'{name:<12} | {np_val:>10.2f} | {pd_val:>10.2f}')
     print()
 
-    # 자동 검증 : 부동 소수점 오차를 고려하여 일치 여부 확인
+    # 자동 검증
     comparison_items = [('평균', 'mean'), ('표준편차', 'std'), ('중앙값', '50%'), ('최솟값', 'min'), ('최댓값', 'max')]
-    
     all_match = True
     for np_key, pd_key in comparison_items:
         if np.isclose(np_stats[np_key], pd_stats[pd_key]):
@@ -311,13 +328,27 @@ def main() :
     explore_structure(df_raw)
 
     # 3. 카테고리 분포 확인
-    show_category_distribution(df_clean)
+    result_dict_dist = show_category_distribution(df_clean)
 
     # 4. 결측치 현황 파악
-    check_missing(df_raw)
+    result_dict_missing, missing_cols, clean_cols = check_missing(df_raw)
 
     # 5. 넘파이를 활용한 문서 길이 통계량 계산 및 비교 검증
-    numpy_doc_stats(df_clean)
+    np_stats, short_docs, pd_stats = numpy_doc_stats(df_clean)
+
+    # 출력을 위한 분석 결과 통합
+    analysis_results = {
+            'result_dict_dist': result_dict_dist,
+            'result_dict_missing': result_dict_missing,
+            'missing_cols': missing_cols,
+            'clean_cols': clean_cols,
+            'np_stats': np_stats,
+            'short_docs': short_docs,
+            'pd_stats': pd_stats
+        }
+    
+    # 6. 출력
+    display_results(analysis_results)
 
 if __name__ == '__main__' :
     main()
