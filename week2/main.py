@@ -67,6 +67,11 @@ def cosine_similarity_numpy(vec1, vec2) :
         
     Returns:
         float: 두 벡터 간의 코사인 유사도 (0~1).
+
+    Note:
+    현재는 데이터셋 규모가 작아 실시간으로 norm을 계산하지만,
+    데이터가 커질 경우 성능 최적화를 위해 입력 벡터를 사전 정규화하여
+    내적 연산만으로 유사도를 계산하는 방식을 권장함.
     '''
     dot_product = np.dot(vec1, vec2)
     norm1 = np.linalg.norm(vec1)
@@ -205,7 +210,15 @@ def tfidf_search(question, df_clean, tfidf_marix, vectorizer, top_k) :
 
 # 6. 출력
 def display_results(question, baseline_df, tfidf_df):
-    '''결과를 포맷에 맞춰 콘솔에 출력합니다.'''
+    '''
+    결과를 포맷에 맞춰 콘솔에 출력합니다.
+    
+    Analysis :
+        두 방식 모두 핵심 키워드를 통해 최상위 문서(D023)를 정확히 도출했으나,
+        Keyword 방식은 단순히 단어 빈도 기반의 정수 점수를 사용하여 문서 간 변별력이 낮습니다.
+        반면, TF-IDF 방식은 전체 문맥 내에서 해당 단어가 가지는 희소성(가중치)을 반영하여,
+        실수 단위의 정교한 유사도를 계산함으로써 검색 결과의 우선순위를 더욱 명확하게 차별화하고 있습니다.
+    '''
 
     display_df = tfidf_df.copy()
     display_df['similarity'] = display_df['similarity'].map('{:.4f}'.format)
@@ -219,9 +232,27 @@ def display_results(question, baseline_df, tfidf_df):
     print('=== TF-IDF Search ===')
     print(display_df[['doc_id', 'title', 'category', 'similarity']])
 
+    # print('=== 해석 ===')
+    # print('두 방식 모두 핵심 키워드를 통해 최상위 문서(D023)를 정확히 도출했으나, ' \
+    # 'Keyword 방식은 단순히 단어 빈도 기반의 정수 점수를 사용하여 문서 간 변별력이 낮습니다. ' \
+    # '반면, TF-IDF 방식은 전체 문맥 내에서 해당 단어가 가지는 희소성(가중치)을 반영하여, ' \
+    # '실수 단위의 정교한 유사도를 계산함으로써 검색 결과의 우선순위를 더욱 명확하게 차별화하고 있습니다.')
+
 
 # 7. main() 함수로 전체 연결
 def main() :
+    '''
+    프로그램의 전체 실행 흐름을 관리합니다.
+    
+    Notes:
+        현재 QUESTION은 하드코딩되어 있으나, 추후 입력을 받거나 
+        CSV 파일에서 질문 목록을 읽어와 배치 처리를 수행하도록 확장 가능합니다.
+        
+    Constants:
+        DATA_PATH: 검색 대상이 되는 데이터셋 경로
+        QUESTION: 검색할 쿼리 문장 (확장 가능)
+        TOP_K: 결과로 출력할 상위 문서 개수
+    '''
     DATA_PATH = 'data/tech_docs.csv'
     QUESTION = 'how does gradient descent work in machine learning'
     TOP_K = 3
