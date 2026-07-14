@@ -165,7 +165,7 @@ def build_tfidf(df_clean) :
 
 
 # 5. TF-IDF 기반 Top-k 검색
-def tfidf_search(question, df_clean, tfidf_marix, vectorizer, top_k) :
+def tfidf_search(question, df_clean, tfidf_matrix, vectorizer, top_k) :
     '''
     질문을 TF-IDF 벡터로 변환 후 코사인 유사도가 높은 상위 K개 문서를 찾습니다.
     
@@ -187,7 +187,7 @@ def tfidf_search(question, df_clean, tfidf_marix, vectorizer, top_k) :
 
     # 2. 문서 집합 전체를 밀집 행렬(Dense Matrix)로 변환
     # 코사인 유사도 직접 계산을 위해 희소 행렬을 숫자 배열로 변환합니다.
-    tfidf_matrix_nparr = tfidf_marix.toarray()
+    tfidf_matrix_nparr = tfidf_matrix.toarray()
 
     # 3. 질문 벡터와 모든 문서 벡터 간의 유사도 계산
     # 리스트 컴프리헨션을 사용하여 모든 문서 행(row)에 대해 코사인 유사도를 계산합니다.
