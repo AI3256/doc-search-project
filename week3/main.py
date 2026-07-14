@@ -196,7 +196,6 @@ def run_evaluation(df_query, func, top_k) :
         
         # 검색 수행
         result_df = func(question, top_k)
-        result_ids = [str(x) for x in result_df['doc_id'].tolist()]
         
         # 결과 ID를 리스트로 추출
         # 만약 결과 데이터프레임의 ID도 문자열이면 그대로 사용 가능
@@ -222,36 +221,23 @@ def run_evaluation(df_query, func, top_k) :
     
 
 # 9. 실패 케이스 분석
-def analyze_failures(df_query, func, top_k):
-    '''
-    모델이 정답을 하나도 찾아내지 못한(MRR이 0인) 쿼리들을 추적합니다.
-    
-    Args:
-        df_query (DataFrame): 평가용 쿼리셋
-        func (function): 검색 함수
-        top_k (int): 검색 범위
-        
-    Returns:
-        list: 실패한 쿼리의 정보가 담긴 딕셔너리 리스트
-    '''
+def analyze_failures(evaluation_logs):
     failures = []
-    for _, row in df_query.iterrows():
-        question = row['query']
-        truth_ids = [x.strip() for x in str(row['relevant_doc_ids']).split(',')]
+
+    for log in evaluation_logs:
+        # 문자열로 저장된 ID를 다시 리스트로 변환 (필요시)
+        truth_ids = [x.strip() for x in str(log['truth_ids']).split(',')]
+        retrieved_ids = log['retrieved_ids'].split(',')
         
-        result_df = func(question, top_k)
-        result_ids = [str(x) for x in result_df['doc_id'].tolist()]
-        
-        # MRR이 0이라는 것은 상위 K개 안에 정답이 하나도 없다는 뜻
-        if reciprocal_rank(result_ids, truth_ids) == 0:
+        # MRR이 0인 경우(상위 K개 안에 정답이 하나도 없는 경우)만 골라냄
+        if reciprocal_rank(retrieved_ids, truth_ids) == 0:
             failures.append({
-                'query': question,
+                'query': log['question'],
                 'truth': truth_ids,
-                'retrieved': result_ids
+                'retrieved': retrieved_ids
             })
-
+            
     return failures
-
 
 
 # 9. 출력
@@ -271,30 +257,6 @@ def print_failures(failures, model_name):
         print(f"   - 정답 ID: {f['truth']}")
         print(f"   - 검색 결과: {f['retrieved']}")
         print()
-
-
-# 출력 저장
-def save_evaluation_results(df_query, func, top_k, filename):
-    '''
-    각 쿼리에 대한 모델의 검색 결과를 상세히 기록하여 CSV 파일로 저장합니다.
-    분석 시 모델이 어떤 문서를 상위 K개로 가져왔는지 확인할 수 있습니다.
-
-    Args:
-        df_query (DataFrame): 평가용 쿼리와 정답 ID가 담긴 데이터프레임
-        func (function): 검색을 수행할 모델 함수 (Keyword 또는 TF-IDF)
-        filename (str): 결과를 저장할 파일 이름 (예: 'result.csv')
-    '''
-    results = []
-    for _, row in df_query.iterrows():
-        result_df = func(row['query'], top_k) # top_k=3 고정
-        results.append({
-            'question': row['query'],
-            'truth_ids': row['relevant_doc_ids'],
-            'retrieved_ids': ",".join([str(x) for x in result_df['doc_id'].tolist()])
-        })
-    
-    pd.DataFrame(results).to_csv(filename, index=False, encoding='utf-8-sig')
-    print(f"평가 상세 결과가 '{filename}'에 저장되었습니다.")
 
 
 # 10. main() 함수로 전체 연결
@@ -317,33 +279,30 @@ def main() :
     tfidf_matrix, vectorizer = build_tfidf(df_clean)
 
     # 3. 키워드 기반 Baseline 검색
-    result_score = keyword_search(QUESTION, df_clean, TOP_K)
+    keyword_search(QUESTION, df_clean, TOP_K)
 
     # 5. TF-IDF 기반 Top-k 검색
-    result_similarity = tfidf_search(QUESTION, df_clean, tfidf_matrix, vectorizer, TOP_K)
+    tfidf_search(QUESTION, df_clean, tfidf_matrix, vectorizer, TOP_K)
 
     key_wrapper = lambda q, k : keyword_search(q, df_clean, k)
     tfidf_wrapper = lambda q, k : tfidf_search(q, df_clean, tfidf_matrix, vectorizer, k)
 
     # 7. 베이스라인 vs TF-IDF 성능 비교
-    results_key, key_logs = run_evaluation(df_query, key_wrapper, TOP_K)
-    # save_evaluation_results(df_query, key_wrapper, "result_keyword.csv")
-
+    results_keyword, keyword_logs = run_evaluation(df_query, key_wrapper, TOP_K)
     results_tfidf, tfidf_logs = run_evaluation(df_query, tfidf_wrapper, TOP_K)
-    # save_evaluation_results(df_query, tfidf_wrapper, "result_tfidf.csv")
-
-    pd.DataFrame(key_logs).to_csv("result_key.csv", index=False, encoding='utf-8-sig')
-    pd.DataFrame(tfidf_logs).to_csv("result_tfidf.csv", index=False, encoding='utf-8-sig')
 
     # 8. 실패 케이스
-    key_failures = analyze_failures(df_query, key_wrapper, TOP_K)
-    tfidf_failures = analyze_failures(df_query, tfidf_wrapper, TOP_K)
+    keyword_failures = analyze_failures(keyword_logs)
+    tfidf_failures = analyze_failures(tfidf_logs)
 
-    # 출력
-    display_results(results_key, results_tfidf)
-    print_failures(key_failures, "Keyword Baseline")
+    # 9. 출력
+    display_results(results_keyword, results_tfidf)
+    print_failures(keyword_failures, "Keyword Baseline")
     print_failures(tfidf_failures, "TF-IDF")
 
+    # 10. 결과 csv로 저장
+    # pd.DataFrame(key_logs).to_csv("result_keyword.csv", index=False, encoding='utf-8-sig')
+    # pd.DataFrame(tfidf_logs).to_csv("result_tfidf.csv", index=False, encoding='utf-8-sig')
 
 
 if __name__ == '__main__' :
