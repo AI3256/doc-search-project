@@ -1,0 +1,101 @@
+query,relevant_doc_ids
+Show an example of creating a new list using list comprehension.,D001
+What are the core characteristics of a Python dictionary?,D002
+"Explain Python functions, focusing on the specific role of *args.",D003
+How does the return value behave if no return statement is provided?,D003
+Imagine you're refactoring a procedural script. How would shifting to an object-oriented approach change the way functions handle state compared to traditional function arguments?,"D003,D004"
+What is the purpose of the __init__ method in a class?,D004
+Describe how class instances and attributes interact in memory.,D004
+"I have a complex dataset representing users. At what point does a dictionary become too cumbersome, and when should I switch to a class to better organize this data?","D002,D004"
+What are try and except blocks used for in Python?,D005
+When should I use the finally block versus the else block?,D005
+"How does Python ensure that file or network resources are properly closed, even if errors occur?","D005,D051"
+How are generators different from standard functions in terms of memory?,D006
+How does the split() method work with delimiters?,D007
+What is the advantage of using the 'with' statement for file I/O?,"D008,D051"
+What are the syntax restrictions of a lambda function?,D009
+What is a decorator and how is the @ symbol used?,D010
+Can you modify a function's behavior without changing its source code?,D010
+I have several utility functions that need logging. How can I apply this logging logic to them without manually editing the source code of each function?,D010
+Why should I use a Python virtual environment?,D011
+How do I create and activate a virtual environment on a Unix system?,D011
+"If different projects on my machine need conflicting package versions, how can I use virtual environments to manage these dependencies and keep my system environment clean?","D011,D043,D049"
+How does slicing work with a negative step value?,D012
+What does it mean to create a branch in Git?,D013
+What is a merge conflict and why does it happen?,"D014,D018"
+Explain the difference between a fast-forward merge and a three-way merge.,D014
+How does merging differ from rebasing in terms of history?,"D014,D015"
+What is the primary purpose of rebasing in Git?,D015
+Why is it dangerous to rebase commits on a public shared branch?,D015
+Is it better to use rebase or merge for a cleaner project history?,"D014,D015"
+What are the best practices for writing a commit message?,D016
+What is the function of a pull request in a team?,D017
+What happens during the code review process of a pull request?,D017
+"We are struggling with messy PRs and disorganized history in our team. How can we improve our collaborative workflow to keep our project history clean and ensure that only verified, granular changes are merged into our main branch?","D16,D017,D053"
+How do you identify a merge conflict?,D018
+What are the manual steps required to resolve a merge conflict?,D018
+"When I run into a merge conflict while working with a team, how can I identify the problematic files and safely reconcile my local changes with the remote history?","D018,D020"
+When is it appropriate to use 'git stash'?,D019
+How does 'git fetch' differ from 'git pull'?,D020
+How can I filter logs by author name?,D021
+Contrast lightweight tags with annotated tags in Git.,D022
+What is gradient descent in machine learning?,D023
+What happens if the learning rate is too large or too small?,D023
+How does gradient descent minimize the loss function?,"D023,D024,D030"
+What is the difference between mean squared error and cross-entropy loss?,D024
+Why are activation functions necessary in neural networks?,D025
+Define overfitting and underfitting in simple terms.,D026
+What are the common signs of overfitting during model training?,D026
+How does regularization help mitigate the overfitting problem?,"D026,D027,D056"
+How does L1 regularization encourage sparsity in weights?,D027
+Why is a three-way data split (train/validation/test) necessary?,D028
+What is the bias-variance tradeoff?,D029
+What is the role of backpropagation in neural networks?,D030
+How is the chain rule of calculus used to propagate error signals?,D030
+How does the model actually use the gradients calculated by backpropagation to update its weights during gradient descent?,"D023,D030"
+How do hidden layers transform input data in neural networks?,D031
+How can np.arange() and np.linspace() be used to create arrays?,D032
+What is the difference between basic and advanced indexing in NumPy?,"D033,D057"
+What is broadcasting in NumPy?,D034
+Why is broadcasting more memory-efficient than copying data?,D034
+"My code is failing with a shape mismatch error while doing NumPy math. What is the trick behind broadcasting that allows these operations, and how can I fix this mismatch?","D034,D040"
+How can I perform singular value decomposition (SVD) in NumPy?,D035
+How do statistical functions handle multi-dimensional arrays using axes?,D036
+How does 'reshape()' differ from 'flatten()' and 'ravel()'?,D037
+Why should I use np.random.seed() in my code?,D038
+What is the purpose of boolean masking in NumPy?,D039
+Why are universal functions (ufuncs) faster than Python loops?,D040
+How can I stack arrays vertically and horizontally in NumPy?,D041
+"What are the main components (index, columns) of a pandas DataFrame?",D042
+What strategies can I use to handle missing data (NaN) in pandas?,D043
+What does the groupby() method do?,D044
+Explain the split-apply-combine strategy in pandas.,D044
+I need to generate a sales report grouped by both 'Region' and 'Product'. How do I set up my groupby call to aggregate multiple categories simultaneously?,"D044,D058"
+What are the different types of joins in pandas?,D045
+"How do inner, outer, left, and right joins differ in merge()?",D045
+"When I'm putting data together, how do I decide if I should just stack these DataFrames with concat or if I really need to merge them like a SQL table?","D041,D045"
+What is the difference between loc and iloc?,D046
+Can I use boolean masks with loc for data selection?,D046
+"I'm debugging a pandas script and the data selection seems wrong. If my index is composed of integers, what specific bugs should I watch out for when toggling between loc and iloc?","D046,D047"
+What is the difference between apply() and map() in pandas?,D047
+How do I aggregate time series data in pandas?,D048
+How can I use the '.str' accessor for cleaning text columns?,D049
+What parameter should I watch out for when reading files with non-ASCII characters?,D050
+What is a context manager and why is it useful?,D051
+How do __enter__ and __exit__ methods work in a class?,D051
+"Why is using a context manager with a with statement safer than just closing files manually, especially when my code might throw an unexpected error?","D05,D08,D051"
+What are the benefits of using Type Hints in Python?,D052
+What is the purpose of cherry-picking a commit?,D053
+What is the main use case for git bisect?,D054
+How does binary search help in finding the specific bug-introducing commit?,D054
+"If I?셫 staring at a massive project history trying to find where a bug snuck in, how does git bisect automate the search compared to me manually checking every single commit?","D021,D054"
+How does batch normalization reduce sensitivity to weight initialization?,D055
+How does dropout prevent neurons from co-adapting?,D056
+What are the memory implications of fancy indexing in NumPy?,D057
+What is a pivot table used for in pandas?,D058
+How do I specify the aggregation function in a pivot table?,D058
+Can you compare pivot_table() with groupby() for summarization?,"D044,D058"
+Compare list comprehensions and generator expressions.,D059
+What are convolutional layers used for in neural networks?,D060
+How do pooling layers affect the model's computational efficiency?,D060
+"My image classifier is struggling to detect patterns in images. Why are fully connected layers alone insufficient, and how do convolution and pooling blocks help the model see features better?","D031,D060"
