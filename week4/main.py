@@ -24,6 +24,7 @@ def load_data(file_path) :
         df = pd.read_csv(file_path)
         rows, cols = df.shape
         print(f'데이터 로드 완료: {rows}행 x {cols}열')
+        print()
     else :
         print(f"오류: '{os.path.basename(file_path)}' 파일을 찾을 수 없습니다.")
         sys.exit()
@@ -55,8 +56,16 @@ def load_query(query_path) :
     return df
 
 
-# 1. 전처리 함수
-def preprocess(df) :
+# 1-1. 텍스트 정제
+def clean_text(text) :
+    text = text.lower()
+    text = re.sub(r'[^a-z0-9\s]', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+    
+
+# 1-2. 기본 전처리 함수
+def preprocess(df, target_col = 'content', new_col = 'content_clean') :
     '''
     content 컬럼의 결측치를 제거하고 텍스트를 소문자화 및 특수문자 제거 처리합니다.
     
@@ -66,17 +75,18 @@ def preprocess(df) :
     Returns:
         pd.DataFrame: 전처리가 완료된 데이터프레임.
     '''
-    df_clean = df.dropna(subset = ['content']).copy()
-
-    def clean_text(text) :
-        text = text.lower()
-        text = re.sub(r'[^a-z0-9\s]', ' ', text)
-        text = re.sub(r'\s+', ' ', text).strip()
-        return text
-
-    df_clean['content_clean'] = df_clean['content'].apply(clean_text)
-
+    df_clean = df.dropna(subset = [target_col]).copy()
+    df_clean[new_col] = df_clean[target_col].apply(clean_text)
     return df_clean
+
+
+# 1-3. 제목을 3회 반복해 본문 앞에 붙인 전처리 함수
+def preprocess_improved(df_clean, target_col = 'content', new_col = 'content_clean') :
+    df_imp = df_clean.copy()
+    title_clean = df_imp['title'].apply(clean_text)
+    title_weighted = (title_clean + " ") * 3
+    df_imp[new_col] = title_weighted + df_imp[target_col]
+    return df_imp
 
 
 # 2. 코사인 유사도 직접 구현
@@ -107,7 +117,7 @@ def cosine_similarity_numpy(vec1, vec2) :
 
 
 # 3. 키워드 기반 Baseline 검색
-def keyword_search(question, df_clean, top_k) :
+def keyword_search(question, df_clean, top_k, target_col='content_clean') :
     '''
     질문과 문서 간의 공통 키워드 개수를 계산하여 상위 K개를 검색합니다.
     단어의 빈도(TF)나 중요도(IDF)를 고려하지 않고,
@@ -125,7 +135,7 @@ def keyword_search(question, df_clean, top_k) :
     q_set = set(question.lower().split())
 
     # 2. 리스트 컴프리헨션을 사용하여 모든 문서에 대해 점수 계산
-    score = [len(q_set & set(content.split())) for content in df_clean['content_clean']]
+    score = [len(q_set & set(content.split())) for content in df_clean[target_col]]
     
     # 3. 점수를 기준으로 상위 K개의 인덱스 추출
     top_indices = np.array(score).argsort()[::-1][:top_k]
@@ -140,7 +150,7 @@ def keyword_search(question, df_clean, top_k) :
 
 
 # 4. TF-IDF 벡터화
-def build_tfidf(df_clean) :
+def build_tfidf(df_clean, target_col = 'content_clean', label = 'Base') :
     '''
     TF-IDF 모델을 생성하고 학습하여 벡터 행렬을 반환합니다.
     
@@ -158,10 +168,10 @@ def build_tfidf(df_clean) :
         )
     
     # 2. 모델 학습 및 변환 (fit_transform)
-    tfidf_matrix = vectorizer.fit_transform(df_clean['content_clean'])
+    tfidf_matrix = vectorizer.fit_transform(df_clean[target_col])
     
     rows, cols = tfidf_matrix.shape
-    print(f'TF-IDF 행렬 크기 : ({rows}, {cols}) | 사용된 단어 수 : {cols}')
+    print(f'[{label}] TF-IDF 행렬 크기 : ({rows}, {cols}) | 사용된 단어 수 : {cols}')
     print()
 
     # 3. 학습된 vectorizer 객체도 함께 반환
@@ -227,6 +237,14 @@ def test_tfidfsearch(question, tfidf_df):
     print(f'=== 예시 검색 : {question} ===')
     print(testresult[['doc_id', 'title', 'category', 'similarity']])
     print()
+
+
+# 래퍼 함수를 만들어주는 공장
+def get_keyword_wrapper(df, target_col = 'content_clean'):
+    return lambda q, k: keyword_search(q, df, k, target_col = target_col)
+
+def get_tfidf_wrapper(df, matrix, vec):
+    return lambda q, k: tfidf_search(q, df, matrix, vec, k)
 
 
 # 7. Precision at k 구현
@@ -348,11 +366,12 @@ def analyze_failures(evaluation_logs):
 # 11. 출력
 def display_results(results_key, results_tfidf):
     '''모델별 지표를 비교하여 콘솔에 정렬된 표 형태로 출력합니다.'''
-    print(f"=== 성능 비교 ===")
+    print(f"=== 키워드/TF-IDF 성능 비교 ===")
     print(f"{'':<18} {'Precision@3':>12} {'MRR':>8}")
     print(f"{'Keyword Baseline':<18} {results_key['precision']:>12.4f} {results_key['mrr']:>8.4f}")
     print(f"{'TF-IDF':<18} {results_tfidf['precision']:>12.4f} {results_tfidf['mrr']:>8.4f}")
     print()
+
 
 def print_failures(failures, model_name):
     '''분석된 실패 케이스를 리스트 형식으로 출력합니다.'''
@@ -362,6 +381,17 @@ def print_failures(failures, model_name):
         print(f"   - 정답 ID: {f['truth']}")
         print(f"   - 검색 결과: {f['retrieved']}")
         print()
+
+
+def print_weighted_comparison(results_keyword_base, results_keyword_imp, results_tfidf_base, results_tfidf_imp):
+    '''모델별 지표를 비교하여 콘솔에 정렬된 표 형태로 출력합니다.'''
+    print(f"=== 전처리(기본/제목 반복) 성능 비교 ===")
+    print(f"{'Search Algorithm':<18} {'Processing Method':<18} {'Precision@3':>12} {'MRR':>8}")
+    print(f"{'Keyword':<18} {'Base':<18} {results_keyword_base['precision']:>12.4f} {results_keyword_base['mrr']:>8.4f}")
+    print(f"{'Keyword':<18} {'Weighted':<18} {results_keyword_imp['precision']:>12.4f} {results_keyword_imp['mrr']:>8.4f}")
+    print(f"{'TF-IDF':<18} {'Base':<18} {results_tfidf_base['precision']:>12.4f} {results_tfidf_base['mrr']:>8.4f}")
+    print(f"{'TF-IDF':<18} {'Weighted':<18} {results_tfidf_imp['precision']:>12.4f} {results_tfidf_imp['mrr']:>8.4f}")
+    print()
 
 
 # 11. main() 함수로 전체 연결
@@ -377,42 +407,45 @@ def main() :
     # 0. 쿼리 불러오기
     df_query = load_query(QUERY_PATH)
 
-    # 1. 전처리
+    # 1. 전처리 기본 / 제목 강화 2가지 생성
     df_clean = preprocess(df_raw)
-
-    # 4. TF-IDF 벡터화
-    tfidf_matrix, vectorizer = build_tfidf(df_clean)
+    df_imp = preprocess_improved(df_clean, target_col = 'content_clean', new_col = 'content_weighted')
 
     # 3. 키워드 기반 Baseline 검색
     keyword_search(QUESTION, df_clean, TOP_K)
+    
+    # 4. TF-IDF 벡터화 (기본 / 제목 강화 2가지)
+    tfidf_matrix, vectorizer = build_tfidf(df_clean, label = 'Base')
+    tfidf_matrix_imp, vectorizer_imp = build_tfidf(df_imp, target_col = 'content_weighted', label = 'Weighted')
 
     # 5. TF-IDF 기반 Top-k 검색
     result_similarity = tfidf_search(QUESTION, df_clean, tfidf_matrix, vectorizer, TOP_K)
 
-    # 6. 예시 질문 하나로 tfidf_sear 실행해서 검색이 동작하는지 확인
+    # 6. 예시 질문 하나로 tfidf_search 실행해서 검색이 동작하는지 확인
     test_tfidfsearch(QUESTION, result_similarity)
 
     # 7. run_evaluation에서 사용할 검색 함수 정의 (래퍼 함수)    
-    key_wrapper = lambda q, k : keyword_search(q, df_clean, k)
-    tfidf_wrapper = lambda q, k : tfidf_search(q, df_clean, tfidf_matrix, vectorizer, k)
+    wrapper_key_base = get_keyword_wrapper(df_clean)
+    wrapper_key_imp = get_keyword_wrapper(df_imp, target_col='content_weighted')
+    wrapper_tfidf_base = get_tfidf_wrapper(df_clean, tfidf_matrix, vectorizer)
+    wrapper_tfidf_imp = get_tfidf_wrapper(df_imp, tfidf_matrix_imp, vectorizer_imp)
 
     # 8. 베이스라인 vs TF-IDF 성능 비교
-    results_keyword, keyword_logs = run_evaluation(df_query, key_wrapper, TOP_K)
-    results_tfidf, tfidf_logs = run_evaluation(df_query, tfidf_wrapper, TOP_K)
+    results_keyword_base, keyword_base_logs = run_evaluation(df_query, wrapper_key_base, TOP_K)
+    results_tfidf_base, tfidf_base_logs = run_evaluation(df_query, wrapper_tfidf_base, TOP_K)
+    results_keyword_imp, keyword_imp_logs = run_evaluation(df_query, wrapper_key_imp, TOP_K)
+    results_tfidf_imp, tfidf_imp_logs = run_evaluation(df_query, wrapper_tfidf_imp, TOP_K)
 
     # 9. 실패 케이스
-    keyword_failures = analyze_failures(keyword_logs)
-    tfidf_failures = analyze_failures(tfidf_logs)
-
+    # keyword_failures = analyze_failures(keyword_base_logs)
+    tfidf_base_failures = analyze_failures(tfidf_base_logs)
+    tfidf_imp_failures = analyze_failures(tfidf_imp_logs)
+    
     # 10. 출력
-    display_results(results_keyword, results_tfidf)
-    # print_failures(keyword_failures, "Keyword Baseline")
-    print_failures(tfidf_failures, "TF-IDF")
-
-    # 11. 결과 csv로 저장
-    # pd.DataFrame(key_logs).to_csv("result_keyword.csv", index=False, encoding='utf-8-sig')
-    # pd.DataFrame(tfidf_logs).to_csv("result_tfidf.csv", index=False, encoding='utf-8-sig')
-
+    display_results(results_keyword_base, results_tfidf_base)    
+    print_weighted_comparison(results_keyword_base, results_keyword_imp, results_tfidf_base, results_tfidf_imp)
+    # print_failures(keyword_failures, "Keyword Baseline")   
+    print_failures(tfidf_base_failures, "TF-IDF")
 
 if __name__ == '__main__' :
     main()
