@@ -14,13 +14,13 @@ def load_data(file_path) :
     지정된 경로에서 CSV 파일을 읽어 데이터프레임으로 반환합니다.
     
     Args :
-        file_path(str) : 분석할 데이터 파일의 경로
+        file_path(str) : 로드할 데이터 파일의 경로
         
     Returns :
         df(pd.DataFrame): 로드된 데이터프레임 객체
         
     Raises :
-        SystemExit : 파일이 존재하지 않을 경우 프로그램을 안전하게 종료함
+        SystemExit : 파일이 존재하지 않을 경우 오류 메시지를 출력하고 프로그램을 종료함.
     '''
     if os.path.exists(file_path) :
         df = pd.read_csv(file_path)
@@ -46,7 +46,7 @@ def load_query(query_path) :
         pd.DataFrame: 불러온 쿼리 데이터가 담긴 데이터프레임.
 
     Raises:
-        SystemExit: 파일이 존재하지 않을 경우 프로그램을 종료합니다.
+        SystemExit: 파일이 존재하지 않을 경우 오류 메시지를 출력하고 프로그램을 종료함.
     '''
     if os.path.exists(query_path) :
         df = pd.read_csv(query_path)
@@ -60,6 +60,15 @@ def load_query(query_path) :
 
 # 1-1. 텍스트 정제
 def clean_text(text) :
+    '''
+    입력된 텍스트를 소문자로 변환하고, 영문자와 숫자, 공백을 제외한 특수문자를 제거합니다.
+    
+    Args:
+        text (str) : 정제할 원본 텍스트.
+        
+    Returns:
+        str : 특수문자가 제거되고 소문자로 변환된 텍스트.
+    '''
     text = text.lower()
     text = re.sub(r'[^a-z0-9\s]', ' ', text)
     text = re.sub(r'\s+', ' ', text).strip()
@@ -69,13 +78,15 @@ def clean_text(text) :
 # 1-2. 기본 전처리 함수
 def preprocess(df, target_col = 'content', new_col = 'content_clean') :
     '''
-    content 컬럼의 결측치를 제거하고 텍스트를 소문자화 및 특수문자 제거 처리합니다.
+    content 컬럼의 결측치를 제거하고, 지정된 컬럼의 텍스트를 정제하여 새로운 컬럼에 저장합니다.
     
     Args:
-        df (pd.DataFrame): 원본 데이터프레임.
+        df (pd.DataFrame) : 원본 데이터프레임.
+        target_col (str) : 전처리할 대상 컬럼명.
+        new_col (str) : 전처리된 텍스트를 저장할 새로운 컬럼명.
         
     Returns:
-        pd.DataFrame: 전처리가 완료된 데이터프레임.
+        pd.DataFrame : 결측치가 제거되고 전처리된 컬럼이 추가된 데이터프레임.
     '''
     df_clean = df.dropna(subset = [target_col]).copy()
     df_clean[new_col] = df_clean[target_col].apply(clean_text)
@@ -84,6 +95,17 @@ def preprocess(df, target_col = 'content', new_col = 'content_clean') :
 
 # 1-3. 제목을 3회 반복해 본문 앞에 붙인 전처리 함수
 def preprocess_improved(df_clean, target_col = 'content', new_col = 'content_clean') :
+    '''
+    제목(title)을 3회 반복하여 본문(content) 앞에 붙여 새로운 전처리 컬럼을 생성합니다.
+    
+    Args:
+        df_clean (pd.DataFrame) : 기본 전처리가 완료된 데이터프레임 (title 컬럼 포함).
+        target_col (str) : 반복할 본문 텍스트가 담긴 컬럼명.
+        new_col (str) : 결과를 저장할 새로운 컬럼명.
+        
+    Returns:
+        pd.DataFrame : 제목이 강조된 텍스트 컬럼이 추가된 데이터프레임.
+    '''
     df_imp = df_clean.copy()
     title_clean = df_imp['title'].apply(clean_text)
     title_weighted = (title_clean + " ") * 3
@@ -91,47 +113,20 @@ def preprocess_improved(df_clean, target_col = 'content', new_col = 'content_cle
     return df_imp
 
 
-# # 2. 코사인 유사도 직접 구현
-# def cosine_similarity_numpy(vec1, vec2) :
-#     '''
-#     sklearn 라이브러리 없이 넘파이로 코사인 유사도를 계산합니다.
-    
-#     Args:
-#         vec1 (np.array): 첫 번째 벡터.
-#         vec2 (np.array): 두 번째 벡터.
-        
-#     Returns:
-#         float: 두 벡터 간의 코사인 유사도 (0~1).
-
-#     Note:
-#     현재는 데이터셋 규모가 작아 실시간으로 norm을 계산하지만,
-#     데이터가 커질 경우 성능 최적화를 위해 입력 벡터를 사전 정규화하여
-#     내적 연산만으로 유사도를 계산하는 방식을 권장함.
-#     '''
-#     dot_product = np.dot(vec1, vec2)
-#     norm1 = np.linalg.norm(vec1)
-#     norm2 = np.linalg.norm(vec2)
-
-#     if norm1 == 0 or norm2 == 0 :
-#         return 0.0
-    
-#     return dot_product / (norm1 * norm2)
-
-
-# 3. 키워드 기반 Baseline 검색
+# 2. 키워드 기반 Baseline 검색
 def keyword_search(question, df_clean, top_k, target_col='content_clean') :
     '''
     질문과 문서 간의 공통 키워드 개수를 계산하여 상위 K개를 검색합니다.
-    단어의 빈도(TF)나 중요도(IDF)를 고려하지 않고,
-    오직 단어의 출현 여부만 따지는 가장 기본적인 검색 방식
+    단어의 중요도(TF-IDF 등)를 고려하지 않고 단어 출현 여부만 따집니다.
     
     Args:
-        question (str): 검색할 질문.
-        df_clean (pd.DataFrame): 전처리된 문서 데이터.
-        top_k (int): 반환할 상위 문서 개수.
+        question (str) : 검색할 질문 문자열.
+        df_clean (pd.DataFrame) : 전처리된 문서 데이터프레임.
+        top_k (int) : 반환할 상위 문서 개수.
+        target_col (str) : 검색 대상이 되는 텍스트 컬럼명.
         
     Returns:
-        pd.DataFrame: 상위 K개의 문서 결과(score 포함).
+        pd.DataFrame : 검색 결과(score 컬럼 포함)가 포함된 상위 K개의 문서 데이터프레임.
     '''
     # 1. 질문을 소문자로 바꾸고 공백 기준으로 잘라 '단어 집합(set)' 생성
     q_set = set(question.lower().split())
@@ -151,16 +146,18 @@ def keyword_search(question, df_clean, top_k, target_col='content_clean') :
     return result_score
 
 
-# 4. TF-IDF 벡터화
+# 3. TF-IDF 벡터화
 def build_tfidf(df_clean, target_col = 'content_clean', label = 'Base') :
     '''
-    TF-IDF 모델을 생성하고 학습하여 벡터 행렬을 반환합니다.
+    TF-IDF 모델을 생성하고 학습하여 정규화된 벡터 행렬을 반환합니다.
     
     Args:
-        df_clean (pd.DataFrame): 전처리된 데이터프레임.
+        df_clean (pd.DataFrame) : 전처리된 데이터프레임.
+        target_col (str) : 벡터화할 텍스트가 담긴 컬럼명.
+        label (str) : 출력 로그에 표시할 모델 레이블.
         
     Returns:
-        tuple: (tfidf_matrix, vectorizer 객체)
+        tuple : (scipy.sparse.csr_matrix, TfidfVectorizer) 정규화된 행렬과 학습된 벡터라이저 객체.
     '''
     # 1. TfidfVectorizer 설정
     vectorizer = TfidfVectorizer(
@@ -183,20 +180,20 @@ def build_tfidf(df_clean, target_col = 'content_clean', label = 'Base') :
     return tfidf_matrix_norm, vectorizer
 
 
-# 5. TF-IDF 기반 Top-k 검색
+# 4. TF-IDF 기반 Top-k 검색
 def tfidf_search(question, df_clean, tfidf_matrix_norm, vectorizer, top_k) :
     '''
-    질문을 TF-IDF 벡터로 변환 후 코사인 유사도가 높은 상위 K개 문서를 찾습니다.
+    질문을 TF-IDF 벡터로 변환 후, 사전 계산된 행렬과 코사인 유사도가 높은 상위 K개 문서를 찾습니다.
     
     Args:
-        question (str): 검색할 질문.
-        df_clean (pd.DataFrame): 전처리된 문서 데이터.
-        tfidf_marix (scipy.sparse.csr_matrix): TF-IDF 벡터 행렬.
-        vectorizer (TfidfVectorizer): 학습된 벡터라이저.
-        top_k (int): 반환할 상위 문서 개수.
+        question (str) : 검색할 질문 문자열.
+        df_clean (pd.DataFrame) : 문서 데이터프레임.
+        tfidf_matrix_norm (scipy.sparse.csr_matrix) : 미리 계산된 정규화된 TF-IDF 문서 행렬.
+        vectorizer (TfidfVectorizer) : 학습된 TF-IDF 벡터라이저 객체.
+        top_k (int) : 반환할 상위 문서 개수.
         
     Returns:
-        pd.DataFrame: 유사도가 계산된 상위 K개의 문서 결과(similarity 포함).
+        pd.DataFrame : 유사도(similarity) 점수가 포함된 상위 K개의 문서 데이터프레임.
     '''
     # 1. 질문(Query)을 문서와 동일한 형태의 벡터로 변환
     q_vec = vectorizer.transform([question.lower()])
@@ -215,7 +212,7 @@ def tfidf_search(question, df_clean, tfidf_matrix_norm, vectorizer, top_k) :
     return result_similarity
 
 
-# 6. tfidf_search 함수가 제대로 동작하는지 질문 1개로 확인
+# 5. tfidf_search 함수가 제대로 동작하는지 질문 1개로 확인
 def test_tfidfsearch(question, tfidf_df):
     '''
     TF-IDF 검색 결과를 화면에 출력하여 동작 여부를 확인합니다.
@@ -236,26 +233,18 @@ def test_tfidfsearch(question, tfidf_df):
     print()
 
 
-# # 래퍼 함수를 만들어주는 공장
-# def get_keyword_wrapper(df, target_col = 'content_clean'):
-#     return lambda q, k: keyword_search(q, df, k, target_col = target_col)
-
-# def get_tfidf_wrapper(df, matrix, vec):
-#     return lambda q, k: tfidf_search(q, df, matrix, vec, k)
-
-
-# 7. Precision at k 구현
+# 6. Precision at k 구현
 def precision_at_k(result_id, truth_id, top_k) :
     '''
-    상위 K개 검색 결과 중 실제 정답이 얼마나 포함되어 있는지 계산합니다.
+    상위 K개 검색 결과 중 실제 정답(relevant) 문서가 포함된 비율(정밀도)을 계산합니다.
     
     Args:
-        result_id (list): 모델이 검색한 문서 ID 리스트
-        truth_id (list): 정답 문서 ID 리스트
-        top_k (int): 평가할 상위 K개의 범위
+        result_id (list) : 모델이 검색한 문서 ID 리스트.
+        truth_id (list) : 실제 정답 문서 ID 리스트.
+        top_k (int) : 평가할 상위 문서 개수.
         
     Returns:
-        float: Precision@K 값 (0.0 ~ 1.0 사이)
+        float : 계산된 Precision@K 값 (0.0 ~ 1.0).
     '''
     # 1. 모델이 예측한 결과 중 상위 K개만 슬라이싱합니다.
     # 2. 정답지(truth_id)를 집합(set)으로 변환하여 검색 속도를 최적화합니다.
@@ -264,7 +253,7 @@ def precision_at_k(result_id, truth_id, top_k) :
     return (len(set(result_id[:top_k]) & set(truth_id))) / top_k
 
 
-# 8. MRR 구현
+# 7. MRR 구현
 def reciprocal_rank(result_id, truth_id) :
     '''
     첫 번째 정답 문서가 몇 번째 순위(rank)에 처음으로 등장하는지 계산합니다.
@@ -291,7 +280,7 @@ def reciprocal_rank(result_id, truth_id) :
     return 0.0
 
 
-# 9. 베이스라인 vs TF-IDF 성능 비교
+# 8. 베이스라인 vs TF-IDF 성능 비교
 def run_evaluation(df_query, func, top_k) :
     '''
     주어진 쿼리셋에 대해 모델의 성능(Precision@K, MRR)을 종합적으로 평가합니다.
@@ -302,7 +291,7 @@ def run_evaluation(df_query, func, top_k) :
         top_k (int): 검색할 상위 K개 수
         
     Returns:
-        dict: 전체 쿼리에 대한 평균 Precision과 평균 MRR
+        tuple : (dict: 지표 평균값, list: 상세 평가 로그)
     '''
     precisions = []
     mrrs = []
@@ -337,11 +326,20 @@ def run_evaluation(df_query, func, top_k) :
         'mrr': np.mean(mrrs)
     }
 
-    return results, evaluation_logs
+    return {'precision': np.mean(precisions), 'mrr': np.mean(mrrs)}, evaluation_logs
     
 
-# 10. 실패 케이스 분석
+# 9. 실패 케이스 분석
 def analyze_failures(evaluation_logs):
+    '''
+    검색 결과 상위 K개 내에 정답이 하나도 포함되지 않은(정밀도 0) 실패 케이스를 추출합니다.
+    
+    Args:
+        evaluation_logs (list) : run_evaluation에서 생성된 로그 리스트.
+        
+    Returns:
+        list : 실패한 쿼리에 대한 상세 로그 리스트.
+    '''
     failures = []
     for log in evaluation_logs:
         if not (set(log['retrieved_ids']) & set(log['truth_ids'])):
@@ -349,8 +347,9 @@ def analyze_failures(evaluation_logs):
     return failures
 
 
-# 성능 출력
+# 10-1. 성능 출력
 def print_summary_table(title, data_list):
+    '''데이터 리스트를 받아 요약 테이블을 콘솔에 출력합니다.'''
     df = pd.DataFrame(data_list)
     df = df.rename(columns={'precision': 'Precision@3', 'mrr': 'MRR'})
     
@@ -359,6 +358,7 @@ def print_summary_table(title, data_list):
     print()
 
 def print_all_results(results):
+    '''전체 모델의 성능 비교 표를 출력합니다.'''
     # 1. 첫 번째 표: 키워드 vs TF-IDF
     print_summary_table("키워드/TF-IDF 성능 비교", [
         {'Model': 'Keyword Baseline', **results['Keyword_Base']},
@@ -374,9 +374,9 @@ def print_all_results(results):
     ])
 
 
-# 실패 케이스 출력
+# 10-2. 실패 케이스 출력
 def print_failures(failures, model_name):
-    '''분석된 실패 케이스를 리스트 형식으로 출력합니다.'''
+    '''실패 케이스의 상세 내용을 리스트 형식으로 출력합니다.'''
     print(f"=== [{model_name}] 실패 케이스 분석 (총 {len(failures)}개) ===")
     for i, f in enumerate(failures, 1):
         print(f"{i}. Q: {f['question']}")
