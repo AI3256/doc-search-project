@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.preprocessing import normalize
 import os
 import sys
 import re
@@ -89,31 +91,31 @@ def preprocess_improved(df_clean, target_col = 'content', new_col = 'content_cle
     return df_imp
 
 
-# 2. 코사인 유사도 직접 구현
-def cosine_similarity_numpy(vec1, vec2) :
-    '''
-    sklearn 라이브러리 없이 넘파이로 코사인 유사도를 계산합니다.
+# # 2. 코사인 유사도 직접 구현
+# def cosine_similarity_numpy(vec1, vec2) :
+#     '''
+#     sklearn 라이브러리 없이 넘파이로 코사인 유사도를 계산합니다.
     
-    Args:
-        vec1 (np.array): 첫 번째 벡터.
-        vec2 (np.array): 두 번째 벡터.
+#     Args:
+#         vec1 (np.array): 첫 번째 벡터.
+#         vec2 (np.array): 두 번째 벡터.
         
-    Returns:
-        float: 두 벡터 간의 코사인 유사도 (0~1).
+#     Returns:
+#         float: 두 벡터 간의 코사인 유사도 (0~1).
 
-    Note:
-    현재는 데이터셋 규모가 작아 실시간으로 norm을 계산하지만,
-    데이터가 커질 경우 성능 최적화를 위해 입력 벡터를 사전 정규화하여
-    내적 연산만으로 유사도를 계산하는 방식을 권장함.
-    '''
-    dot_product = np.dot(vec1, vec2)
-    norm1 = np.linalg.norm(vec1)
-    norm2 = np.linalg.norm(vec2)
+#     Note:
+#     현재는 데이터셋 규모가 작아 실시간으로 norm을 계산하지만,
+#     데이터가 커질 경우 성능 최적화를 위해 입력 벡터를 사전 정규화하여
+#     내적 연산만으로 유사도를 계산하는 방식을 권장함.
+#     '''
+#     dot_product = np.dot(vec1, vec2)
+#     norm1 = np.linalg.norm(vec1)
+#     norm2 = np.linalg.norm(vec2)
 
-    if norm1 == 0 or norm2 == 0 :
-        return 0.0
+#     if norm1 == 0 or norm2 == 0 :
+#         return 0.0
     
-    return dot_product / (norm1 * norm2)
+#     return dot_product / (norm1 * norm2)
 
 
 # 3. 키워드 기반 Baseline 검색
@@ -170,16 +172,19 @@ def build_tfidf(df_clean, target_col = 'content_clean', label = 'Base') :
     # 2. 모델 학습 및 변환 (fit_transform)
     tfidf_matrix = vectorizer.fit_transform(df_clean[target_col])
     
+    # 2. 정규화된 행렬 생성 (이게 속도 향상의 핵심!)
+    tfidf_matrix_norm = normalize(tfidf_matrix, axis=1)
+
     rows, cols = tfidf_matrix.shape
     print(f'[{label}] TF-IDF 행렬 크기 : ({rows}, {cols}) | 사용된 단어 수 : {cols}')
     print()
 
     # 3. 학습된 vectorizer 객체도 함께 반환
-    return tfidf_matrix, vectorizer
+    return tfidf_matrix_norm, vectorizer
 
 
 # 5. TF-IDF 기반 Top-k 검색
-def tfidf_search(question, df_clean, tfidf_matrix, vectorizer, top_k) :
+def tfidf_search(question, df_clean, tfidf_matrix_norm, vectorizer, top_k) :
     '''
     질문을 TF-IDF 벡터로 변환 후 코사인 유사도가 높은 상위 K개 문서를 찾습니다.
     
@@ -194,26 +199,18 @@ def tfidf_search(question, df_clean, tfidf_matrix, vectorizer, top_k) :
         pd.DataFrame: 유사도가 계산된 상위 K개의 문서 결과(similarity 포함).
     '''
     # 1. 질문(Query)을 문서와 동일한 형태의 벡터로 변환
-    q_matrix_nparr = vectorizer.transform([question.lower()]).toarray().flatten()
-    
-    # 2. 문서 집합 전체를 밀집 행렬(Dense Matrix)로 변환
-    tfidf_matrix_nparr = tfidf_matrix.toarray()
+    q_vec = vectorizer.transform([question.lower()])
+    q_vec_norm = normalize(q_vec, axis=1)
 
-    # 3. 질문 벡터와 모든 문서 벡터 간의 유사도 계산
-    if np.linalg.norm(q_matrix_nparr) == 0:
-    # 모든 문서의 유사도를 0으로 설정하여 리스트로 생성
-        similarity = [0.0] * tfidf_matrix_nparr.shape[0]    
-    else :
-        similarity = [cosine_similarity_numpy(q_matrix_nparr, row) for row in tfidf_matrix_nparr]
+    # 2. 희소 행렬 상태에서 바로 코사인 유사도 계산
+    # 결과값은 (1, 60) 형태의 2차원 배열이 됨
+    similarities = (q_vec_norm @ tfidf_matrix_norm.T).toarray().flatten()
     
-    # 4. 유사도가 높은 순으로 정렬하여 상위 K개 인덱스 추출
-    top_indices = np.array(similarity).argsort()[::-1][:top_k]
+    # 3. 정렬 및 추출
+    top_indices = similarities.argsort()[::-1][:top_k]
 
-    # 5. 선택된 상위 문서 데이터 가져오기
     result_similarity = df_clean.iloc[top_indices].copy()
-
-    # 6. 결과 데이터프레임에 유사도 점수 컬럼 추가
-    result_similarity['similarity'] = [similarity[i] for i in top_indices]
+    result_similarity['similarity'] = similarities[top_indices]
 
     return result_similarity
 
@@ -239,12 +236,12 @@ def test_tfidfsearch(question, tfidf_df):
     print()
 
 
-# 래퍼 함수를 만들어주는 공장
-def get_keyword_wrapper(df, target_col = 'content_clean'):
-    return lambda q, k: keyword_search(q, df, k, target_col = target_col)
+# # 래퍼 함수를 만들어주는 공장
+# def get_keyword_wrapper(df, target_col = 'content_clean'):
+#     return lambda q, k: keyword_search(q, df, k, target_col = target_col)
 
-def get_tfidf_wrapper(df, matrix, vec):
-    return lambda q, k: tfidf_search(q, df, matrix, vec, k)
+# def get_tfidf_wrapper(df, matrix, vec):
+#     return lambda q, k: tfidf_search(q, df, matrix, vec, k)
 
 
 # 7. Precision at k 구현
@@ -311,11 +308,11 @@ def run_evaluation(df_query, func, top_k) :
     mrrs = []
     evaluation_logs = []
 
-    for _, row in df_query.iterrows():
-        question = row['query']
+    for row in df_query.itertuples(index=False):
+        question = row.query
         
         # 'D001,D051' 문자열을 리스트 ['D001', 'D051']로 변환
-        truth_ids = [x.strip() for x in str(row['relevant_doc_ids']).split(',')]
+        truth_ids = [x.strip() for x in str(row.relevant_doc_ids).split(',')]
         
         # 검색 수행
         result_df = func(question, top_k)
@@ -330,8 +327,8 @@ def run_evaluation(df_query, func, top_k) :
     
         evaluation_logs.append({
             'question': question,
-            'truth_ids': row['relevant_doc_ids'],
-            'retrieved_ids': ",".join(result_ids)
+            'truth_ids': truth_ids,
+            'retrieved_ids': result_ids
         })
 
     # 루프가 끝난 뒤 전체 평균을 계산하여 반환
@@ -346,52 +343,46 @@ def run_evaluation(df_query, func, top_k) :
 # 10. 실패 케이스 분석
 def analyze_failures(evaluation_logs):
     failures = []
-
     for log in evaluation_logs:
-        # 문자열로 저장된 ID를 다시 리스트로 변환 (필요시)
-        truth_ids = [x.strip() for x in str(log['truth_ids']).split(',')]
-        retrieved_ids = log['retrieved_ids'].split(',')
-        
-        # MRR이 0인 경우(상위 K개 안에 정답이 하나도 없는 경우)만 골라냄
-        if reciprocal_rank(retrieved_ids, truth_ids) == 0:
-            failures.append({
-                'query': log['question'],
-                'truth': truth_ids,
-                'retrieved': retrieved_ids
-            })
-            
+        if not (set(log['retrieved_ids']) & set(log['truth_ids'])):
+            failures.append(log)
     return failures
 
 
-# 11. 출력
-def display_results(results_key, results_tfidf):
-    '''모델별 지표를 비교하여 콘솔에 정렬된 표 형태로 출력합니다.'''
-    print(f"=== 키워드/TF-IDF 성능 비교 ===")
-    print(f"{'':<18} {'Precision@3':>12} {'MRR':>8}")
-    print(f"{'Keyword Baseline':<18} {results_key['precision']:>12.4f} {results_key['mrr']:>8.4f}")
-    print(f"{'TF-IDF':<18} {results_tfidf['precision']:>12.4f} {results_tfidf['mrr']:>8.4f}")
+# 성능 출력
+def print_summary_table(title, data_list):
+    df = pd.DataFrame(data_list)
+    df = df.rename(columns={'precision': 'Precision@3', 'mrr': 'MRR'})
+    
+    print(f"=== {title} ===")
+    print(df)
     print()
 
+def print_all_results(results):
+    # 1. 첫 번째 표: 키워드 vs TF-IDF
+    print_summary_table("키워드/TF-IDF 성능 비교", [
+        {'Model': 'Keyword Baseline', **results['Keyword_Base']},
+        {'Model': 'TF-IDF',           **results['TFIDF_Base']}
+    ])
 
+    # 2. 두 번째 표: 전처리 비교
+    print_summary_table("전처리(기본/제목 반복) 성능 비교", [
+        {'Algorithm': 'Keyword', 'Method': 'Base',     **results['Keyword_Base']},
+        {'Algorithm': 'Keyword', 'Method': 'Weighted', **results['Keyword_Imp']},
+        {'Algorithm': 'TF-IDF',  'Method': 'Base',     **results['TFIDF_Base']},
+        {'Algorithm': 'TF-IDF',  'Method': 'Weighted', **results['TFIDF_Imp']}
+    ])
+
+
+# 실패 케이스 출력
 def print_failures(failures, model_name):
     '''분석된 실패 케이스를 리스트 형식으로 출력합니다.'''
     print(f"=== [{model_name}] 실패 케이스 분석 (총 {len(failures)}개) ===")
     for i, f in enumerate(failures, 1):
-        print(f"{i}. Q: {f['query']}")
-        print(f"   - 정답 ID: {f['truth']}")
-        print(f"   - 검색 결과: {f['retrieved']}")
+        print(f"{i}. Q: {f['question']}")
+        print(f"   - 정답 ID: {f['truth_ids']}")
+        print(f"   - 검색 결과: {f['retrieved_ids']}")
         print()
-
-
-def print_weighted_comparison(results_keyword_base, results_keyword_imp, results_tfidf_base, results_tfidf_imp):
-    '''모델별 지표를 비교하여 콘솔에 정렬된 표 형태로 출력합니다.'''
-    print(f"=== 전처리(기본/제목 반복) 성능 비교 ===")
-    print(f"{'Search Algorithm':<18} {'Processing Method':<18} {'Precision@3':>12} {'MRR':>8}")
-    print(f"{'Keyword':<18} {'Base':<18} {results_keyword_base['precision']:>12.4f} {results_keyword_base['mrr']:>8.4f}")
-    print(f"{'Keyword':<18} {'Weighted':<18} {results_keyword_imp['precision']:>12.4f} {results_keyword_imp['mrr']:>8.4f}")
-    print(f"{'TF-IDF':<18} {'Base':<18} {results_tfidf_base['precision']:>12.4f} {results_tfidf_base['mrr']:>8.4f}")
-    print(f"{'TF-IDF':<18} {'Weighted':<18} {results_tfidf_imp['precision']:>12.4f} {results_tfidf_imp['mrr']:>8.4f}")
-    print()
 
 
 # 11. main() 함수로 전체 연결
@@ -410,42 +401,38 @@ def main() :
     # 1. 전처리 기본 / 제목 강화 2가지 생성
     df_clean = preprocess(df_raw)
     df_imp = preprocess_improved(df_clean, target_col = 'content_clean', new_col = 'content_weighted')
-
-    # 3. 키워드 기반 Baseline 검색
-    keyword_search(QUESTION, df_clean, TOP_K)
     
-    # 4. TF-IDF 벡터화 (기본 / 제목 강화 2가지)
+    # 2. TF-IDF 벡터화 (기본 / 제목 강화 2가지)
     tfidf_matrix, vectorizer = build_tfidf(df_clean, label = 'Base')
     tfidf_matrix_imp, vectorizer_imp = build_tfidf(df_imp, target_col = 'content_weighted', label = 'Weighted')
 
-    # 5. TF-IDF 기반 Top-k 검색
+    # 3. TF-IDF 기반 Top-k 검색
     result_similarity = tfidf_search(QUESTION, df_clean, tfidf_matrix, vectorizer, TOP_K)
 
-    # 6. 예시 질문 하나로 tfidf_search 실행해서 검색이 동작하는지 확인
+    # 4. 예시 질문 하나로 tfidf_search 실행해서 검색이 동작하는지 확인
     test_tfidfsearch(QUESTION, result_similarity)
 
-    # 7. run_evaluation에서 사용할 검색 함수 정의 (래퍼 함수)    
-    wrapper_key_base = get_keyword_wrapper(df_clean)
-    wrapper_key_imp = get_keyword_wrapper(df_imp, target_col='content_weighted')
-    wrapper_tfidf_base = get_tfidf_wrapper(df_clean, tfidf_matrix, vectorizer)
-    wrapper_tfidf_imp = get_tfidf_wrapper(df_imp, tfidf_matrix_imp, vectorizer_imp)
+    # 5. 검색 모델 설정
+    models = {
+        'Keyword_Base':   lambda q, k: keyword_search(q, df_clean, k, target_col='content_clean'),
+        'Keyword_Imp':    lambda q, k: keyword_search(q, df_imp, k, target_col='content_weighted'),
+        'TFIDF_Base':     lambda q, k: tfidf_search(q, df_clean, tfidf_matrix, vectorizer, k),
+        'TFIDF_Imp':      lambda q, k: tfidf_search(q, df_imp, tfidf_matrix_imp, vectorizer_imp, k)
+    }
 
-    # 8. 베이스라인 vs TF-IDF 성능 비교
-    results_keyword_base, keyword_base_logs = run_evaluation(df_query, wrapper_key_base, TOP_K)
-    results_tfidf_base, tfidf_base_logs = run_evaluation(df_query, wrapper_tfidf_base, TOP_K)
-    results_keyword_imp, keyword_imp_logs = run_evaluation(df_query, wrapper_key_imp, TOP_K)
-    results_tfidf_imp, tfidf_imp_logs = run_evaluation(df_query, wrapper_tfidf_imp, TOP_K)
+    # 6. 평가 및 결과 저장
+    results = {}
+    logs = {}
 
-    # 9. 실패 케이스
-    # keyword_failures = analyze_failures(keyword_base_logs)
-    tfidf_base_failures = analyze_failures(tfidf_base_logs)
-    tfidf_imp_failures = analyze_failures(tfidf_imp_logs)
+    for name, func in models.items():
+        results[name], logs[name] = run_evaluation(df_query, func, TOP_K)
+
+    # 7. 결과 출력
+    print_all_results(results)
     
-    # 10. 출력
-    display_results(results_keyword_base, results_tfidf_base)    
-    print_weighted_comparison(results_keyword_base, results_keyword_imp, results_tfidf_base, results_tfidf_imp)
-    # print_failures(keyword_failures, "Keyword Baseline")   
-    print_failures(tfidf_base_failures, "TF-IDF")
+    # 8. 실패 케이스 출력
+    print_failures(analyze_failures(logs['TFIDF_Base']), "TF-IDF")
+
 
 if __name__ == '__main__' :
     main()
