@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import normalize
 import os
 import sys
@@ -35,27 +34,41 @@ def load_data(file_path) :
 
 
 # 0. 평가셋 불러오기
-def load_query(query_path) :
+def load_query(query_input):
     '''
-    평가용 쿼리 데이터가 담긴 CSV 파일을 불러옵니다.
-
-    Args:
-        query_path (str): 쿼리 데이터가 저장된 CSV 파일의 경로.
-
-    Returns:
-        pd.DataFrame: 불러온 쿼리 데이터가 담긴 데이터프레임.
-
-    Raises:
-        SystemExit: 파일이 존재하지 않을 경우 오류 메시지를 출력하고 프로그램을 종료함.
+    파일 경로, 리스트, 또는 데이터프레임 형태의 쿼리 입력을 받아 데이터프레임으로 반환합니다.
+    
+    Args :
+        query_input (str, list, pd.DataFrame) : 로드할 쿼리 데이터 (파일 경로 문자열, 딕셔너리 리스트, 또는 데이터프레임).
+        
+    Returns :
+        pd.DataFrame : 변환된 쿼리 데이터프레임 객체.
+        
+    Raises :
+        SystemExit : 파일이 존재하지 않거나 지원하지 않는 입력 형식일 경우 오류 메시지를 출력하고 프로그램을 종료함.
     '''
-    if os.path.exists(query_path) :
-        df = pd.read_csv(query_path)
+    if isinstance(query_input, str):
+        # 기존처럼 파일 경로인 경우
+        if os.path.exists(query_input):
+            return pd.read_csv(query_input)
+        else:
+            print(f"오류: '{os.path.basename(query_input)}' 파일을 찾을 수 없습니다.")
+            sys.exit()
 
-    else :
-        print(f"오류: '{os.path.basename(query_path)}' 파일을 찾을 수 없습니다.")
+    elif isinstance(query_input, list):
+        # 리스트 형태 [{query: ..., relevant_doc_ids: ...}, ...]
+        return pd.DataFrame(query_input)
+    
+    elif isinstance(query_input, pd.DataFrame):
+        # 이미 DataFrame인 경우 그대로 반환
+        return query_input
+    
+    else:
+        print(f"오류: 지원하지 않는 쿼리 입력 형식입니다. (입력 타입: {type(query_input)})")
+        print("사용 가능한 형식: CSV 파일 경로(str) 또는 딕셔너리를 담은 리스트(list)")
         sys.exit()
     
-    return df
+    return query_input
 
 
 # 1-1. 텍스트 정제
@@ -213,21 +226,32 @@ def tfidf_search(question, df_clean, tfidf_matrix_norm, vectorizer, top_k) :
 
 
 # 5. tfidf_search 함수가 제대로 동작하는지 질문 1개로 확인
-def test_tfidfsearch(question, tfidf_df):
+def test_tfidfsearch(df_query, df_clean, tfidf_matrix, vectorizer, top_k):
     '''
-    TF-IDF 검색 결과를 화면에 출력하여 동작 여부를 확인합니다.
+    평가셋(df_query)에서 무작위로 질문 1개를 골라 TF-IDF 검색을 수행하고 결과를 콘솔에 출력합니다.
 
     Args:
-        question (str): 검색에 사용된 질문(쿼리) 문자열.
-        tfidf_df (pd.DataFrame): 검색 결과가 담긴 데이터프레임. 
-                                 'similarity' 컬럼이 포함되어 있어야 합니다.
+        df_query (pd.DataFrame): 쿼리 및 정답 ID가 담긴 평가 데이터프레임.
+        df_clean (pd.DataFrame): 전처리된 문서 데이터프레임.
+        tfidf_matrix (scipy.sparse.csr_matrix): 정규화된 TF-IDF 문서 행렬.
+        vectorizer (TfidfVectorizer): 학습된 TF-IDF 벡터라이저 객체.
+        top_k (int): 반환할 상위 문서 개수.
     
     Returns:
         None: 결과를 콘솔에 출력하기만 합니다.
     '''
+    # 1. 평가셋에서 무작위로 1행 추출
+    random_row = df_query.sample(n=1).iloc[0]
+    question = random_row['query']
+    truth_id = random_row['relevant_doc_ids']
+
+    # 2. TF-IDF 검색 수행
+    tfidf_df = tfidf_search(question, df_clean, tfidf_matrix, vectorizer, top_k)
+    
     testresult = tfidf_df.copy()
     testresult['similarity'] = testresult['similarity'].map('{:.4f}'.format)
 
+    # 3. 출력
     print(f'=== 예시 검색 : {question} ===')
     print(testresult[['doc_id', 'title', 'category', 'similarity']])
     print()
@@ -347,16 +371,44 @@ def analyze_failures(evaluation_logs):
     return failures
 
 
-# 10-1. 성능 출력
+# 10. 출력 포맷팅
 def print_summary_table(title, data_list):
     '''데이터 리스트를 받아 요약 테이블을 콘솔에 출력합니다.'''
     df = pd.DataFrame(data_list)
     df = df.rename(columns={'precision': 'Precision@3', 'mrr': 'MRR'})
     
-    print(f"=== {title} ===")
-    print(df)
-    print()
+    df['Precision@3'] = df['Precision@3'].map('{:.4f}'.format)
+    df['MRR'] = df['MRR'].map('{:.4f}'.format)
 
+    print(f"=== {title} ===")
+
+    cols = df.columns.tolist()
+    # 컬럼별 최대 길이를 계산해 적절한 간격(여유 공간 4칸) 부여
+    widths = [max(len(str(col)), df[col].astype(str).map(len).max()) + 4 for col in cols]
+    
+    # 정렬 방식을 지정할 딕셔너리 (숫자형 컬럼은 'right', 나머지는 'left')
+    # 필요에 따라 다른 숫자 컬럼이 추가되어도 'precision'이나 'mrr' 등이 포함되면 자동으로 오른쪽 정렬됩니다.
+    alignments = {col: 'right' if col in ['Precision@3', 'MRR'] else 'left' for col in cols}
+    
+    # 헤더 출력 (헤더는 보기 좋게 전부 왼쪽 정렬로 고정하거나 데이터 정렬을 따를 수 있음)
+    header_line = "".join([f"{col:<{w}}" if alignments[col] == 'left' else f"{col:>{w}}" for col, w in zip(cols, widths)])
+    print(header_line)
+    print("-" * len(header_line))
+    
+    # 데이터 행 출력 (문자는 왼쪽 정렬(<), 숫자는 오른쪽 정렬(>))
+    for row in df.itertuples(index=False):
+        row_line = ""
+        for val, col, w in zip(row, cols, widths):
+            if alignments[col] == 'right':
+                row_line += f"{str(val):>{w}}"  # 숫자: 오른쪽 정렬
+            else:
+                row_line += f"{str(val):<{w}}"  # 문자: 왼쪽 정렬
+        print(row_line)
+        
+    print()    
+
+
+# 11-1. 성능 출력
 def print_all_results(results):
     '''전체 모델의 성능 비교 표를 출력합니다.'''
     # 1. 첫 번째 표: 키워드 vs TF-IDF
@@ -374,7 +426,7 @@ def print_all_results(results):
     ])
 
 
-# 10-2. 실패 케이스 출력
+# 11-2. 실패 케이스 출력
 def print_failures(failures, model_name):
     '''실패 케이스의 상세 내용을 리스트 형식으로 출력합니다.'''
     print(f"=== [{model_name}] 실패 케이스 분석 (총 {len(failures)}개) ===")
@@ -385,18 +437,28 @@ def print_failures(failures, model_name):
         print()
 
 
-# 11. main() 함수로 전체 연결
+# 12. main() 함수로 전체 연결
 def main() :
     DATA_PATH = 'data/tech_docs.csv'
-    QUERY_PATH = 'data/docs_query.csv'
-    QUESTION = 'git merge conflicts'
+    
+    # [선택형 쿼리 입력] CSV 파일 혹은 리스트 중 하나를 주석 해제하여 사용하세요.
+
+    # 1) CSV 파일 경로를 사용하는 경우
+    QUERY_INPUT = 'data/docs_query.csv'
+
+    # 2) 일회성 테스트용 리스트 형태를 사용하는 경우
+    # QUERY_INPUT = [
+    #     {'query': 'git merge conflicts', 'relevant_doc_ids': 'D018, D014'},
+    #     {'query': 'how to undo last commit', 'relevant_doc_ids': 'D016, D054'}
+    # ]
+
     TOP_K = 3
 
     # 0. 데이터 불러오기
     df_raw = load_data(DATA_PATH)
 
     # 0. 쿼리 불러오기
-    df_query = load_query(QUERY_PATH)
+    df_query = load_query(QUERY_INPUT)
 
     # 1. 전처리 기본 / 제목 강화 2가지 생성
     df_clean = preprocess(df_raw)
@@ -406,13 +468,10 @@ def main() :
     tfidf_matrix, vectorizer = build_tfidf(df_clean, label = 'Base')
     tfidf_matrix_imp, vectorizer_imp = build_tfidf(df_imp, target_col = 'content_weighted', label = 'Weighted')
 
-    # 3. TF-IDF 기반 Top-k 검색
-    result_similarity = tfidf_search(QUESTION, df_clean, tfidf_matrix, vectorizer, TOP_K)
+    # 3. tfidf_search 동작 확인 : 평가셋에서 임의로 질문을 골라 검색 및 결과 출력
+    test_tfidfsearch(df_query, df_clean, tfidf_matrix, vectorizer, TOP_K)
 
-    # 4. 예시 질문 하나로 tfidf_search 실행해서 검색이 동작하는지 확인
-    test_tfidfsearch(QUESTION, result_similarity)
-
-    # 5. 검색 모델 설정
+    # 4. 검색 모델 설정
     models = {
         'Keyword_Base':   lambda q, k: keyword_search(q, df_clean, k, target_col='content_clean'),
         'Keyword_Imp':    lambda q, k: keyword_search(q, df_imp, k, target_col='content_weighted'),
@@ -420,17 +479,17 @@ def main() :
         'TFIDF_Imp':      lambda q, k: tfidf_search(q, df_imp, tfidf_matrix_imp, vectorizer_imp, k)
     }
 
-    # 6. 평가 및 결과 저장
+    # 5. 평가 및 결과 저장
     results = {}
     logs = {}
 
     for name, func in models.items():
         results[name], logs[name] = run_evaluation(df_query, func, TOP_K)
 
-    # 7. 결과 출력
+    # 6. 결과 출력
     print_all_results(results)
     
-    # 8. 실패 케이스 출력
+    # 7. 실패 케이스 출력
     print_failures(analyze_failures(logs['TFIDF_Base']), "TF-IDF")
 
 
