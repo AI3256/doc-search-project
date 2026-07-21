@@ -1,53 +1,74 @@
-# doc-search-project
-# 📊 기술 문서 데이터 분석 스크립트
+# 🔍 Tech Docs Search Engine & Evaluation Pipeline
 
-이 프로젝트는 기술 문서 데이터를 로드하여 구조를 파악하고, 카테고리별 분포 분석, 결측치 진단 및 통계량 검증 과정을 자동화하는 도구입니다.
-
----
-
-## 🚀 주요 기능
-
-* **데이터 구조 요약**: 데이터의 크기, 컬럼명, 자료형 및 상위 데이터를 한눈에 확인합니다.
-* **카테고리 분포 분석**: 카테고리별 문서 수, 비율, 평균 단어 수를 산출하여 데이터의 구성을 분석합니다.
-* **결측치 자동 진단**: 결측치 비율에 따라 심각도(낮음, 주의, 높음)를 자동으로 분류합니다.
-* **통계량 검증**: NumPy로 계산한 통계량과 Pandas의 통계 기능을 비교하여 데이터 처리의 정확성을 검증합니다.
+텍스트 전처리 방식과 검색 알고리즘(Keyword Baseline vs TF-IDF)에 따른 정보 검색(Information Retrieval) 성능을 평가하고 비교하기 위한 파이썬 파이프라인 프로젝트입니다.
 
 ---
 
-## 🛠 사용 환경
+## 📂 주요 기능 (Features)
 
-* **Python**: 3.x 이상
-* **라이브러리**: pandas, numpy
+1. **유연한 쿼리 및 데이터 로드**
+   - 기술 문서 데이터셋(CSV)과 평가 쿼리셋을 안정적으로 로드합니다.
+   - **일회성/단발성 테스트 지원**: CSV 파일 경로뿐만 아니라, 파이썬 리스트 형태의 쿼리를 즉시 입력하여 평가셋으로 변환할 수 있습니다 (`load_query`).
+2. **다양한 전처리 파이프라인**
+   - **기본 전처리 (`preprocess`)**: 소문자 변환, 특수문자 제거 및 결측치 처리.
+   - **강화 전처리 (`preprocess_improved`)**: 문서의 중요 키워드인 제목(`title`)을 3회 반복하여 본문 앞에 가중치로 부여하는 방식 구현.
+3. **검색 알고리즘 비교**
+   - **Keyword Baseline**: 단순 단어 출현 빈도 및 교집합 기반 검색 (`keyword_search`).
+   - **TF-IDF + Cosine Similarity**: 사이킷런 기반 TF-IDF 벡터화 및 정규화된 희소 행렬 연산을 활용한 고속 코사인 유사도 검색 (`tfidf_search`).
+4. **자동화된 랜덤 샘플 테스트**
+   - 평가 쿼리셋(`df_query`)에서 무작위로 질문을 추출하여 실시간으로 검색 결과를 콘솔에 시각화하고 정상 동작 여부를 검증합니다 (`test_tfidfsearch`).
+5. **정량적 성능 평가 및 실패 케이스 분석**
+   - **Precision@K** 및 **MRR (Mean Reciprocal Rank)** 지표를 활용한 객관적 성능 측정 (`run_evaluation`).
+   - 모델이 상위 K개 내에 정답을 찾지 못한 **실패 케이스(Failure Cases)**를 자동으로 추출하여 분석 (`analyze_failures`).
+6. **가독성 높은 결과 출력**
+   - 콘솔 출력 시 데이터 정렬(문자열 좌측, 지표 우측 정렬)과 소수점 포맷팅(`{:.4f}`)이 적용된 요약 비교 테이블 제공 (`print_summary_table`).
 
 ---
 
-## 📥 설치 및 실행 방법
+## 🛠️ 기술 스택 (Tech Stack)
 
-### 1. 라이브러리 설치
-터미널에서 아래 명령어를 입력하여 필요한 라이브러리를 설치합니다.
+- **Language**: Python 3.x
+- **Libraries**: 
+  - `pandas`, `numpy` (데이터 조작 및 연산)
+  - `scikit-learn` (`TfidfVectorizer`, `cosine_similarity`, `normalize`)
+  - `re`, `os`, `sys` (텍스트 정제 및 시스템 제어)
+
+---
+
+## 🚀 시작하기 (Getting Started)
+
+### 1. 사전 준비 (Prerequisites)
+필수 라이브러리를 설치합니다.
 ```bash
-pip install pandas numpy
+pip install pandas numpy scikit-learn
 ```
 
-### 2. 실행 방법
-1. 분석하고자 하는 CSV 파일을 프로젝트 폴더에 위치시킵니다.
-2. 소스 코드 내 main() 함수에서 DATA_PATH 변수를 데이터 파일 경로에 맞게 수정합니다.
-3. 터미널에서 다음 명령어를 실행합니다.
-```bash
-python 분석스크립트파일이름.py
+### 2. 프로젝트 구조
+```
+project_root/
+│
+├── data/
+│   ├── tech_docs.csv        # 검색 대상 기술 문서 데이터
+│   └── docs_query.csv       # 평가용 쿼리 및 정답 ID셋 (선택)
+│
+├── main.py                  # 메인 실행 스크립트 (파이프라인)
+└── README.md
 ```
 
----
+### 3. 코드 실행
+스크립트 하단의 main() 함수에서 QUERY_INPUT 설정을 통해 CSV 파일 경로 혹은 테스트용 리스트 중 원하는 방식을 선택하여 실행할 수 있습니다.
 
-## 📈 분석 결과 예시
+💡 사용 방법 예시 (QUERY_INPUT)
 
-스크립트를 실행하면 터미널에서 다음과 같은 분석 결과가 단계별로 출력됩니다.
+A. CSV 파일 기반 전체 평가
+```python
+QUERY_INPUT = 'data/docs_query.csv'
+```
 
-* **데이터 로드 현황**: 데이터 로드 상태 및 기본 정보 요약
-* **카테고리 분석**: 카테고리별 데이터 분포 요약 표
-* **결측치 진단**: 결측치 비율 및 심각도 분류 표
-* **검증 결과**: NumPy vs Pandas 통계량 비교 검증 결과 (✅ / ❌ 표시)
-
----
-
-> Tip: 데이터 파일의 경로가 올바른지 확인하고, 라이브러리가 설치된 가상환경에서 실행하는 것을 권장합니다.
+B. 즉석 리스트 쿼리 기반 일회성/단발성 테스트
+```python
+QUERY_INPUT = [
+    {'query': 'git merge conflicts', 'relevant_doc_ids': 'D018, D014'},
+    {'query': 'how to undo last commit', 'relevant_doc_ids': 'D016, D054'}
+]
+```
